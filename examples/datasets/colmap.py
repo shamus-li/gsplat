@@ -357,6 +357,7 @@ class Dataset:
         split: str = "train",
         patch_size: Optional[int] = None,
         load_depths: bool = False,
+        match_string: Optional[str] = None,
     ):
         self.parser = parser
         self.split = split
@@ -365,6 +366,10 @@ class Dataset:
         indices = np.arange(len(self.parser.image_names))
         if split == "train":
             self.indices = indices[indices % self.parser.test_every != 0]
+            if match_string:
+                self.indices = [
+                    i for i in self.indices if match_string in self.parser.image_names[i]
+                ]
         else:
             self.indices = indices[indices % self.parser.test_every == 0]
 

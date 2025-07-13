@@ -123,6 +123,8 @@ class Config:
     visible_adam: bool = False
     # Anti-aliasing in rasterization. Might slightly hurt quantitative metrics.
     antialiased: bool = False
+    # Match string for training images
+    match_string: Optional[str] = None
 
     # Use random background for training to discourage transparency
     random_bkgd: bool = False
@@ -342,6 +344,7 @@ class Runner:
             split="train",
             patch_size=cfg.patch_size,
             load_depths=cfg.depth_loss,
+            match_string=cfg.match_string,
         )
         self.valset = Dataset(self.parser, split="val")
         self.scene_scale = self.parser.scene_scale * 1.1 * cfg.global_scale

@@ -1,6 +1,7 @@
 import json
 import os
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 import cv2
 import imageio.v2 as imageio
@@ -11,12 +12,8 @@ from pycolmap import SceneManager
 from tqdm import tqdm
 from typing_extensions import assert_never
 
-from .normalize import (
-    align_principal_axes,
-    similarity_from_cameras,
-    transform_cameras,
-    transform_points,
-)
+from .normalize import (align_principal_axes, similarity_from_cameras,
+                        transform_cameras, transform_points)
 
 
 def _get_rel_paths(path_dir: str) -> List[str]:
@@ -358,20 +355,64 @@ class Dataset:
         patch_size: Optional[int] = None,
         load_depths: bool = False,
         match_string: Optional[str] = None,
+        selected_images: Optional[Iterable[str]] = None,
     ):
         self.parser = parser
         self.split = split
         self.patch_size = patch_size
         self.load_depths = load_depths
+        allowed_image_names: Optional[Set[str]] = None
+        if selected_images is not None:
+            allowed_image_names = {
+                name.strip() for name in selected_images if name and name.strip()
+            }
+            if not allowed_image_names:
+                raise ValueError(
+                    "selected_images was provided but no valid image names were found."
+                )
         indices = np.arange(len(self.parser.image_names))
+
+        def _filter_indices_by_match_string(
+            source_indices: Iterable[int], split_label: str
+        ) -> List[int]:
+            if not match_string:
+                return list(source_indices)
+            token_pattern = re.compile(
+                rf"(?<![A-Za-z0-9]){re.escape(match_string)}(?![A-Za-z0-9])",
+                flags=re.IGNORECASE,
+            )
+            filtered = [
+                i
+                for i in source_indices
+                if token_pattern.search(self.parser.image_names[i])
+            ]
+            if not filtered:
+                raise ValueError(
+                    f"No {split_label} images matched '{match_string}'. "
+                    "Adjust the match string or run without filtering."
+                )
+            return filtered
+
         if split == "train":
-            self.indices = indices[indices % self.parser.test_every != 0]
-            if match_string:
+            train_indices = indices[indices % self.parser.test_every != 0]
+            self.indices = _filter_indices_by_match_string(
+                train_indices, split_label="training"
+            )
+            if allowed_image_names is not None:
                 self.indices = [
-                    i for i in self.indices if match_string in self.parser.image_names[i]
+                    i
+                    for i in self.indices
+                    if self.parser.image_names[i] in allowed_image_names
                 ]
+                if not self.indices:
+                    raise ValueError(
+                        "No training images left after applying selected_images."
+                    )
         else:
-            self.indices = indices[indices % self.parser.test_every == 0]
+            val_indices = indices[indices % self.parser.test_every == 0]
+            self.indices = _filter_indices_by_match_string(
+                val_indices, split_label="evaluation"
+            )
 
     def __len__(self):
         return len(self.indices)

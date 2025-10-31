@@ -1,0 +1,763 @@
+==========================================
+GSPLAT DUAL TRAINING - ARRAY JOB
+==========================================
+Job ID: 260746
+Array Task ID: 1
+Run type: Filtered (match 'wide')
+Node: monakhova-compute-01
+GPU: 0
+Data dir: ../gs7/input_data/dog/iphone4_shared/subsets/train
+Result base: results/train
+Result dir: results/train/filtered
+Match string: wide
+Eval match string: (none)
+Eval dataset: ../gs7/input_data/dog/iphone4_shared/subsets/test
+==========================================
+
+Executing: python examples/simple_trainer.py default     --disable_viewer     --data_factor 1     --data_dir "../gs7/input_data/dog/iphone4_shared/subsets/train"     --result_dir "results/train/filtered"     --save_ply     --pose_opt     --eval_steps 3000 7000 30000     --ply_steps 3000 7000 30000     --strategy.reset_every 100000     --strategy.pause_refine_after_reset 0     --strategy.prune_scale3d 0.22     --strategy.prune_scale2d 0.12     --strategy.prune_opa 0.006     --strategy.grow_grad2d 0.00035     --strategy.grow_scale3d 0.012     --strategy.refine_stop_iter 26000     --strategy.refine_scale2d_stop_iter 26000     --scale_reg 0.0005     --scales_lr 0.003     --means_lr 0.00012     --antialiased     --test_every 8 --match_string "wide"
+
+Warning: image_path not found for reconstruction
+[Parser] 186 images, taken by 186 cameras.
+Training set size: 54
+Scene scale: 2.239795129346898
+Model initialized. Number of GS: 607175
+Step 600: 367 GSs duplicated, 4416 GSs split. Now having 611958 GSs.
+Step 600: 28516 GSs pruned. Now having 583442 GSs.
+Step 700: 812 GSs duplicated, 4354 GSs split. Now having 588608 GSs.
+Step 700: 3581 GSs pruned. Now having 585027 GSs.
+Step 800: 759 GSs duplicated, 4180 GSs split. Now having 589966 GSs.
+Step 800: 2455 GSs pruned. Now having 587511 GSs.
+Step 900: 789 GSs duplicated, 3901 GSs split. Now having 592201 GSs.
+Step 900: 1963 GSs pruned. Now having 590238 GSs.
+Step 1000: 757 GSs duplicated, 3658 GSs split. Now having 594653 GSs.
+Step 1000: 1596 GSs pruned. Now having 593057 GSs.
+Step 1100: 771 GSs duplicated, 3333 GSs split. Now having 597161 GSs.
+Step 1100: 1402 GSs pruned. Now having 595759 GSs.
+Step 1200: 768 GSs duplicated, 3318 GSs split. Now having 599845 GSs.
+Step 1200: 1270 GSs pruned. Now having 598575 GSs.
+Step 1300: 708 GSs duplicated, 3011 GSs split. Now having 602294 GSs.
+Step 1300: 1007 GSs pruned. Now having 601287 GSs.
+Step 1400: 712 GSs duplicated, 2914 GSs split. Now having 604913 GSs.
+Step 1400: 931 GSs pruned. Now having 603982 GSs.
+Step 1500: 664 GSs duplicated, 2810 GSs split. Now having 607456 GSs.
+Step 1500: 896 GSs pruned. Now having 606560 GSs.
+Step 1600: 590 GSs duplicated, 2599 GSs split. Now having 609749 GSs.
+Step 1600: 856 GSs pruned. Now having 608893 GSs.
+Step 1700: 627 GSs duplicated, 2574 GSs split. Now having 612094 GSs.
+Step 1700: 727 GSs pruned. Now having 611367 GSs.
+Step 1800: 596 GSs duplicated, 2383 GSs split. Now having 614346 GSs.
+Step 1800: 698 GSs pruned. Now having 613648 GSs.
+Step 1900: 552 GSs duplicated, 2354 GSs split. Now having 616554 GSs.
+Step 1900: 685 GSs pruned. Now having 615869 GSs.
+Step 2000: 584 GSs duplicated, 2263 GSs split. Now having 618716 GSs.
+Step 2000: 569 GSs pruned. Now having 618147 GSs.
+Step 2100: 508 GSs duplicated, 2065 GSs split. Now having 620720 GSs.
+Step 2100: 547 GSs pruned. Now having 620173 GSs.
+Step 2200: 495 GSs duplicated, 1928 GSs split. Now having 622596 GSs.
+Step 2200: 454 GSs pruned. Now having 622142 GSs.
+Step 2300: 483 GSs duplicated, 2075 GSs split. Now having 624700 GSs.
+Step 2300: 528 GSs pruned. Now having 624172 GSs.
+Step 2400: 475 GSs duplicated, 1845 GSs split. Now having 626492 GSs.
+Step 2400: 532 GSs pruned. Now having 625960 GSs.
+Step 2500: 470 GSs duplicated, 1928 GSs split. Now having 628358 GSs.
+Step 2500: 435 GSs pruned. Now having 627923 GSs.
+Step 2600: 428 GSs duplicated, 1658 GSs split. Now having 630009 GSs.
+Step 2600: 369 GSs pruned. Now having 629640 GSs.
+Step 2700: 438 GSs duplicated, 1531 GSs split. Now having 631609 GSs.
+Step 2700: 363 GSs pruned. Now having 631246 GSs.
+Step 2800: 392 GSs duplicated, 1522 GSs split. Now having 633160 GSs.
+Step 2800: 374 GSs pruned. Now having 632786 GSs.
+Step 2900: 411 GSs duplicated, 1555 GSs split. Now having 634752 GSs.
+Step 2900: 356 GSs pruned. Now having 634396 GSs.
+Running evaluation...
+PSNR: 30.888, SSIM: 0.9433, LPIPS: 0.063 Time: 0.004s/image Number of GS: 634396
+Running trajectory rendering...
+Video saved to results/train/filtered/videos/traj_2999.mp4
+Step 3000: 368 GSs duplicated, 1502 GSs split. Now having 636266 GSs.
+Step 3000: 359 GSs pruned. Now having 635907 GSs.
+Step 3100: 422 GSs duplicated, 1599 GSs split. Now having 637928 GSs.
+Step 3100: 335 GSs pruned. Now having 637593 GSs.
+Step 3200: 352 GSs duplicated, 1411 GSs split. Now having 639356 GSs.
+Step 3200: 383 GSs pruned. Now having 638973 GSs.
+Step 3300: 388 GSs duplicated, 1426 GSs split. Now having 640787 GSs.
+Step 3300: 337 GSs pruned. Now having 640450 GSs.
+Step 3400: 349 GSs duplicated, 1320 GSs split. Now having 642119 GSs.
+Step 3400: 295 GSs pruned. Now having 641824 GSs.
+Step 3500: 347 GSs duplicated, 1403 GSs split. Now having 643574 GSs.
+Step 3500: 278 GSs pruned. Now having 643296 GSs.
+Step 3600: 344 GSs duplicated, 1265 GSs split. Now having 644905 GSs.
+Step 3600: 317 GSs pruned. Now having 644588 GSs.
+Step 3700: 328 GSs duplicated, 1100 GSs split. Now having 646016 GSs.
+Step 3700: 266 GSs pruned. Now having 645750 GSs.
+Step 3800: 338 GSs duplicated, 1305 GSs split. Now having 647393 GSs.
+Step 3800: 331 GSs pruned. Now having 647062 GSs.
+Step 3900: 326 GSs duplicated, 1338 GSs split. Now having 648726 GSs.
+Step 3900: 294 GSs pruned. Now having 648432 GSs.
+Step 4000: 283 GSs duplicated, 1158 GSs split. Now having 649873 GSs.
+Step 4000: 304 GSs pruned. Now having 649569 GSs.
+Step 4100: 286 GSs duplicated, 1123 GSs split. Now having 650978 GSs.
+Step 4100: 284 GSs pruned. Now having 650694 GSs.
+Step 4200: 290 GSs duplicated, 1075 GSs split. Now having 652059 GSs.
+Step 4200: 244 GSs pruned. Now having 651815 GSs.
+Step 4300: 303 GSs duplicated, 1184 GSs split. Now having 653302 GSs.
+Step 4300: 269 GSs pruned. Now having 653033 GSs.
+Step 4400: 315 GSs duplicated, 1156 GSs split. Now having 654504 GSs.
+Step 4400: 271 GSs pruned. Now having 654233 GSs.
+Step 4500: 277 GSs duplicated, 1034 GSs split. Now having 655544 GSs.
+Step 4500: 267 GSs pruned. Now having 655277 GSs.
+Step 4600: 282 GSs duplicated, 1253 GSs split. Now having 656812 GSs.
+Step 4600: 229 GSs pruned. Now having 656583 GSs.
+Step 4700: 270 GSs duplicated, 1069 GSs split. Now having 657922 GSs.
+Step 4700: 265 GSs pruned. Now having 657657 GSs.
+Step 4800: 276 GSs duplicated, 1090 GSs split. Now having 659023 GSs.
+Step 4800: 208 GSs pruned. Now having 658815 GSs.
+Step 4900: 267 GSs duplicated, 970 GSs split. Now having 660052 GSs.
+Step 4900: 260 GSs pruned. Now having 659792 GSs.
+Step 5000: 261 GSs duplicated, 1062 GSs split. Now having 661115 GSs.
+Step 5000: 233 GSs pruned. Now having 660882 GSs.
+Step 5100: 253 GSs duplicated, 1211 GSs split. Now having 662346 GSs.
+Step 5100: 271 GSs pruned. Now having 662075 GSs.
+Step 5200: 263 GSs duplicated, 1003 GSs split. Now having 663341 GSs.
+Step 5200: 261 GSs pruned. Now having 663080 GSs.
+Step 5300: 237 GSs duplicated, 894 GSs split. Now having 664211 GSs.
+Step 5300: 253 GSs pruned. Now having 663958 GSs.
+Step 5400: 216 GSs duplicated, 888 GSs split. Now having 665062 GSs.
+Step 5400: 223 GSs pruned. Now having 664839 GSs.
+Step 5500: 236 GSs duplicated, 878 GSs split. Now having 665953 GSs.
+Step 5500: 264 GSs pruned. Now having 665689 GSs.
+Step 5600: 256 GSs duplicated, 963 GSs split. Now having 666908 GSs.
+Step 5600: 256 GSs pruned. Now having 666652 GSs.
+Step 5700: 200 GSs duplicated, 982 GSs split. Now having 667834 GSs.
+Step 5700: 207 GSs pruned. Now having 667627 GSs.
+Step 5800: 231 GSs duplicated, 867 GSs split. Now having 668725 GSs.
+Step 5800: 231 GSs pruned. Now having 668494 GSs.
+Step 5900: 199 GSs duplicated, 894 GSs split. Now having 669587 GSs.
+Step 5900: 262 GSs pruned. Now having 669325 GSs.
+Step 6000: 210 GSs duplicated, 874 GSs split. Now having 670409 GSs.
+Step 6000: 242 GSs pruned. Now having 670167 GSs.
+Step 6100: 175 GSs duplicated, 796 GSs split. Now having 671138 GSs.
+Step 6100: 209 GSs pruned. Now having 670929 GSs.
+Step 6200: 203 GSs duplicated, 914 GSs split. Now having 672046 GSs.
+Step 6200: 247 GSs pruned. Now having 671799 GSs.
+Step 6300: 182 GSs duplicated, 834 GSs split. Now having 672815 GSs.
+Step 6300: 246 GSs pruned. Now having 672569 GSs.
+Step 6400: 193 GSs duplicated, 848 GSs split. Now having 673610 GSs.
+Step 6400: 228 GSs pruned. Now having 673382 GSs.
+Step 6500: 194 GSs duplicated, 897 GSs split. Now having 674473 GSs.
+Step 6500: 233 GSs pruned. Now having 674240 GSs.
+Step 6600: 183 GSs duplicated, 857 GSs split. Now having 675280 GSs.
+Step 6600: 225 GSs pruned. Now having 675055 GSs.
+Step 6700: 202 GSs duplicated, 896 GSs split. Now having 676153 GSs.
+Step 6700: 219 GSs pruned. Now having 675934 GSs.
+Step 6800: 161 GSs duplicated, 822 GSs split. Now having 676917 GSs.
+Step 6800: 175 GSs pruned. Now having 676742 GSs.
+Step 6900: 165 GSs duplicated, 876 GSs split. Now having 677783 GSs.
+Step 6900: 267 GSs pruned. Now having 677516 GSs.
+Step:  6999 {'mem': 1.2513842582702637, 'ellipse_time': 351.63832902908325, 'num_GS': 677516}
+Running evaluation...
+PSNR: 32.743, SSIM: 0.9547, LPIPS: 0.054 Time: 0.005s/image Number of GS: 677516
+Running trajectory rendering...
+Video saved to results/train/filtered/videos/traj_6999.mp4
+Step 7000: 150 GSs duplicated, 931 GSs split. Now having 678597 GSs.
+Step 7000: 251 GSs pruned. Now having 678346 GSs.
+Step 7100: 192 GSs duplicated, 876 GSs split. Now having 679414 GSs.
+Step 7100: 216 GSs pruned. Now having 679198 GSs.
+Step 7200: 153 GSs duplicated, 876 GSs split. Now having 680227 GSs.
+Step 7200: 233 GSs pruned. Now having 679994 GSs.
+Step 7300: 158 GSs duplicated, 922 GSs split. Now having 681074 GSs.
+Step 7300: 180 GSs pruned. Now having 680894 GSs.
+Step 7400: 157 GSs duplicated, 898 GSs split. Now having 681949 GSs.
+Step 7400: 203 GSs pruned. Now having 681746 GSs.
+Step 7500: 149 GSs duplicated, 927 GSs split. Now having 682822 GSs.
+Step 7500: 242 GSs pruned. Now having 682580 GSs.
+Step 7600: 174 GSs duplicated, 789 GSs split. Now having 683543 GSs.
+Step 7600: 214 GSs pruned. Now having 683329 GSs.
+Step 7700: 154 GSs duplicated, 857 GSs split. Now having 684340 GSs.
+Step 7700: 237 GSs pruned. Now having 684103 GSs.
+Step 7800: 139 GSs duplicated, 831 GSs split. Now having 685073 GSs.
+Step 7800: 217 GSs pruned. Now having 684856 GSs.
+Step 7900: 158 GSs duplicated, 847 GSs split. Now having 685861 GSs.
+Step 7900: 210 GSs pruned. Now having 685651 GSs.
+Step 8000: 136 GSs duplicated, 885 GSs split. Now having 686672 GSs.
+Step 8000: 218 GSs pruned. Now having 686454 GSs.
+Step 8100: 123 GSs duplicated, 886 GSs split. Now having 687463 GSs.
+Step 8100: 187 GSs pruned. Now having 687276 GSs.
+Step 8200: 103 GSs duplicated, 855 GSs split. Now having 688234 GSs.
+Step 8200: 219 GSs pruned. Now having 688015 GSs.
+Step 8300: 138 GSs duplicated, 838 GSs split. Now having 688991 GSs.
+Step 8300: 222 GSs pruned. Now having 688769 GSs.
+Step 8400: 136 GSs duplicated, 951 GSs split. Now having 689856 GSs.
+Step 8400: 205 GSs pruned. Now having 689651 GSs.
+Step 8500: 164 GSs duplicated, 875 GSs split. Now having 690690 GSs.
+Step 8500: 228 GSs pruned. Now having 690462 GSs.
+Step 8600: 120 GSs duplicated, 850 GSs split. Now having 691432 GSs.
+Step 8600: 207 GSs pruned. Now having 691225 GSs.
+Step 8700: 121 GSs duplicated, 869 GSs split. Now having 692215 GSs.
+Step 8700: 175 GSs pruned. Now having 692040 GSs.
+Step 8800: 102 GSs duplicated, 862 GSs split. Now having 693004 GSs.
+Step 8800: 191 GSs pruned. Now having 692813 GSs.
+Step 8900: 114 GSs duplicated, 855 GSs split. Now having 693782 GSs.
+Step 8900: 199 GSs pruned. Now having 693583 GSs.
+Step 9000: 106 GSs duplicated, 911 GSs split. Now having 694600 GSs.
+Step 9000: 218 GSs pruned. Now having 694382 GSs.
+Step 9100: 88 GSs duplicated, 804 GSs split. Now having 695274 GSs.
+Step 9100: 205 GSs pruned. Now having 695069 GSs.
+Step 9200: 93 GSs duplicated, 832 GSs split. Now having 695994 GSs.
+Step 9200: 186 GSs pruned. Now having 695808 GSs.
+Step 9300: 119 GSs duplicated, 916 GSs split. Now having 696843 GSs.
+Step 9300: 203 GSs pruned. Now having 696640 GSs.
+Step 9400: 79 GSs duplicated, 802 GSs split. Now having 697521 GSs.
+Step 9400: 195 GSs pruned. Now having 697326 GSs.
+Step 9500: 88 GSs duplicated, 864 GSs split. Now having 698278 GSs.
+Step 9500: 220 GSs pruned. Now having 698058 GSs.
+Step 9600: 77 GSs duplicated, 898 GSs split. Now having 699033 GSs.
+Step 9600: 171 GSs pruned. Now having 698862 GSs.
+Step 9700: 103 GSs duplicated, 886 GSs split. Now having 699851 GSs.
+Step 9700: 203 GSs pruned. Now having 699648 GSs.
+Step 9800: 96 GSs duplicated, 891 GSs split. Now having 700635 GSs.
+Step 9800: 192 GSs pruned. Now having 700443 GSs.
+Step 9900: 83 GSs duplicated, 859 GSs split. Now having 701385 GSs.
+Step 9900: 207 GSs pruned. Now having 701178 GSs.
+Step 10000: 143 GSs duplicated, 917 GSs split. Now having 702238 GSs.
+Step 10000: 176 GSs pruned. Now having 702062 GSs.
+Step 10100: 76 GSs duplicated, 941 GSs split. Now having 703079 GSs.
+Step 10100: 198 GSs pruned. Now having 702881 GSs.
+Step 10200: 75 GSs duplicated, 788 GSs split. Now having 703744 GSs.
+Step 10200: 225 GSs pruned. Now having 703519 GSs.
+Step 10300: 74 GSs duplicated, 864 GSs split. Now having 704457 GSs.
+Step 10300: 193 GSs pruned. Now having 704264 GSs.
+Step 10400: 100 GSs duplicated, 960 GSs split. Now having 705324 GSs.
+Step 10400: 210 GSs pruned. Now having 705114 GSs.
+Step 10500: 70 GSs duplicated, 754 GSs split. Now having 705938 GSs.
+Step 10500: 206 GSs pruned. Now having 705732 GSs.
+Step 10600: 92 GSs duplicated, 833 GSs split. Now having 706657 GSs.
+Step 10600: 185 GSs pruned. Now having 706472 GSs.
+Step 10700: 46 GSs duplicated, 833 GSs split. Now having 707351 GSs.
+Step 10700: 175 GSs pruned. Now having 707176 GSs.
+Step 10800: 81 GSs duplicated, 793 GSs split. Now having 708050 GSs.
+Step 10800: 171 GSs pruned. Now having 707879 GSs.
+Step 10900: 62 GSs duplicated, 901 GSs split. Now having 708842 GSs.
+Step 10900: 171 GSs pruned. Now having 708671 GSs.
+Step 11000: 74 GSs duplicated, 861 GSs split. Now having 709606 GSs.
+Step 11000: 183 GSs pruned. Now having 709423 GSs.
+Step 11100: 86 GSs duplicated, 911 GSs split. Now having 710420 GSs.
+Step 11100: 187 GSs pruned. Now having 710233 GSs.
+Step 11200: 88 GSs duplicated, 940 GSs split. Now having 711261 GSs.
+Step 11200: 202 GSs pruned. Now having 711059 GSs.
+Step 11300: 79 GSs duplicated, 847 GSs split. Now having 711985 GSs.
+Step 11300: 181 GSs pruned. Now having 711804 GSs.
+Step 11400: 80 GSs duplicated, 876 GSs split. Now having 712760 GSs.
+Step 11400: 183 GSs pruned. Now having 712577 GSs.
+Step 11500: 58 GSs duplicated, 894 GSs split. Now having 713529 GSs.
+Step 11500: 198 GSs pruned. Now having 713331 GSs.
+Step 11600: 62 GSs duplicated, 827 GSs split. Now having 714220 GSs.
+Step 11600: 175 GSs pruned. Now having 714045 GSs.
+Step 11700: 52 GSs duplicated, 877 GSs split. Now having 714974 GSs.
+Step 11700: 234 GSs pruned. Now having 714740 GSs.
+Step 11800: 75 GSs duplicated, 976 GSs split. Now having 715791 GSs.
+Step 11800: 200 GSs pruned. Now having 715591 GSs.
+Step 11900: 85 GSs duplicated, 834 GSs split. Now having 716510 GSs.
+Step 11900: 186 GSs pruned. Now having 716324 GSs.
+Step 12000: 77 GSs duplicated, 811 GSs split. Now having 717212 GSs.
+Step 12000: 180 GSs pruned. Now having 717032 GSs.
+Step 12100: 57 GSs duplicated, 896 GSs split. Now having 717985 GSs.
+Step 12100: 203 GSs pruned. Now having 717782 GSs.
+Step 12200: 40 GSs duplicated, 856 GSs split. Now having 718678 GSs.
+Step 12200: 179 GSs pruned. Now having 718499 GSs.
+Step 12300: 49 GSs duplicated, 837 GSs split. Now having 719385 GSs.
+Step 12300: 162 GSs pruned. Now having 719223 GSs.
+Step 12400: 50 GSs duplicated, 865 GSs split. Now having 720138 GSs.
+Step 12400: 208 GSs pruned. Now having 719930 GSs.
+Step 12500: 60 GSs duplicated, 948 GSs split. Now having 720938 GSs.
+Step 12500: 170 GSs pruned. Now having 720768 GSs.
+Step 12600: 76 GSs duplicated, 906 GSs split. Now having 721750 GSs.
+Step 12600: 195 GSs pruned. Now having 721555 GSs.
+Step 12700: 38 GSs duplicated, 889 GSs split. Now having 722482 GSs.
+Step 12700: 164 GSs pruned. Now having 722318 GSs.
+Step 12800: 33 GSs duplicated, 921 GSs split. Now having 723272 GSs.
+Step 12800: 168 GSs pruned. Now having 723104 GSs.
+Step 12900: 40 GSs duplicated, 890 GSs split. Now having 724034 GSs.
+Step 12900: 180 GSs pruned. Now having 723854 GSs.
+Step 13000: 39 GSs duplicated, 897 GSs split. Now having 724790 GSs.
+Step 13000: 193 GSs pruned. Now having 724597 GSs.
+Step 13100: 74 GSs duplicated, 967 GSs split. Now having 725638 GSs.
+Step 13100: 190 GSs pruned. Now having 725448 GSs.
+Step 13200: 53 GSs duplicated, 908 GSs split. Now having 726409 GSs.
+Step 13200: 197 GSs pruned. Now having 726212 GSs.
+Step 13300: 54 GSs duplicated, 911 GSs split. Now having 727177 GSs.
+Step 13300: 164 GSs pruned. Now having 727013 GSs.
+Step 13400: 36 GSs duplicated, 951 GSs split. Now having 728000 GSs.
+Step 13400: 165 GSs pruned. Now having 727835 GSs.
+Step 13500: 44 GSs duplicated, 1023 GSs split. Now having 728902 GSs.
+Step 13500: 169 GSs pruned. Now having 728733 GSs.
+Step 13600: 40 GSs duplicated, 866 GSs split. Now having 729639 GSs.
+Step 13600: 185 GSs pruned. Now having 729454 GSs.
+Step 13700: 27 GSs duplicated, 969 GSs split. Now having 730450 GSs.
+Step 13700: 184 GSs pruned. Now having 730266 GSs.
+Step 13800: 61 GSs duplicated, 842 GSs split. Now having 731169 GSs.
+Step 13800: 165 GSs pruned. Now having 731004 GSs.
+Step 13900: 66 GSs duplicated, 1006 GSs split. Now having 732076 GSs.
+Step 13900: 182 GSs pruned. Now having 731894 GSs.
+Step 14000: 56 GSs duplicated, 822 GSs split. Now having 732772 GSs.
+Step 14000: 156 GSs pruned. Now having 732616 GSs.
+Step 14100: 26 GSs duplicated, 998 GSs split. Now having 733640 GSs.
+Step 14100: 175 GSs pruned. Now having 733465 GSs.
+Step 14200: 34 GSs duplicated, 968 GSs split. Now having 734467 GSs.
+Step 14200: 173 GSs pruned. Now having 734294 GSs.
+Step 14300: 38 GSs duplicated, 839 GSs split. Now having 735171 GSs.
+Step 14300: 217 GSs pruned. Now having 734954 GSs.
+Step 14400: 40 GSs duplicated, 935 GSs split. Now having 735929 GSs.
+Step 14400: 178 GSs pruned. Now having 735751 GSs.
+Step 14500: 40 GSs duplicated, 877 GSs split. Now having 736668 GSs.
+Step 14500: 197 GSs pruned. Now having 736471 GSs.
+Step 14600: 51 GSs duplicated, 837 GSs split. Now having 737359 GSs.
+Step 14600: 166 GSs pruned. Now having 737193 GSs.
+Step 14700: 22 GSs duplicated, 923 GSs split. Now having 738138 GSs.
+Step 14700: 149 GSs pruned. Now having 737989 GSs.
+Step 14800: 38 GSs duplicated, 908 GSs split. Now having 738935 GSs.
+Step 14800: 179 GSs pruned. Now having 738756 GSs.
+Step 14900: 34 GSs duplicated, 824 GSs split. Now having 739614 GSs.
+Step 14900: 160 GSs pruned. Now having 739454 GSs.
+Step 15000: 26 GSs duplicated, 915 GSs split. Now having 740395 GSs.
+Step 15000: 153 GSs pruned. Now having 740242 GSs.
+Step 15100: 23 GSs duplicated, 996 GSs split. Now having 741261 GSs.
+Step 15100: 150 GSs pruned. Now having 741111 GSs.
+Step 15200: 59 GSs duplicated, 1045 GSs split. Now having 742215 GSs.
+Step 15200: 160 GSs pruned. Now having 742055 GSs.
+Step 15300: 39 GSs duplicated, 1026 GSs split. Now having 743120 GSs.
+Step 15300: 160 GSs pruned. Now having 742960 GSs.
+Step 15400: 37 GSs duplicated, 940 GSs split. Now having 743937 GSs.
+Step 15400: 165 GSs pruned. Now having 743772 GSs.
+Step 15500: 31 GSs duplicated, 1015 GSs split. Now having 744818 GSs.
+Step 15500: 167 GSs pruned. Now having 744651 GSs.
+Step 15600: 30 GSs duplicated, 911 GSs split. Now having 745592 GSs.
+Step 15600: 166 GSs pruned. Now having 745426 GSs.
+Step 15700: 29 GSs duplicated, 823 GSs split. Now having 746278 GSs.
+Step 15700: 159 GSs pruned. Now having 746119 GSs.
+Step 15800: 42 GSs duplicated, 946 GSs split. Now having 747107 GSs.
+Step 15800: 173 GSs pruned. Now having 746934 GSs.
+Step 15900: 38 GSs duplicated, 942 GSs split. Now having 747914 GSs.
+Step 15900: 168 GSs pruned. Now having 747746 GSs.
+Step 16000: 38 GSs duplicated, 957 GSs split. Now having 748741 GSs.
+Step 16000: 157 GSs pruned. Now having 748584 GSs.
+Step 16100: 30 GSs duplicated, 983 GSs split. Now having 749597 GSs.
+Step 16100: 164 GSs pruned. Now having 749433 GSs.
+Step 16200: 31 GSs duplicated, 890 GSs split. Now having 750354 GSs.
+Step 16200: 168 GSs pruned. Now having 750186 GSs.
+Step 16300: 23 GSs duplicated, 987 GSs split. Now having 751196 GSs.
+Step 16300: 154 GSs pruned. Now having 751042 GSs.
+Step 16400: 41 GSs duplicated, 954 GSs split. Now having 752037 GSs.
+Step 16400: 172 GSs pruned. Now having 751865 GSs.
+Step 16500: 34 GSs duplicated, 1024 GSs split. Now having 752923 GSs.
+Step 16500: 153 GSs pruned. Now having 752770 GSs.
+Step 16600: 35 GSs duplicated, 1014 GSs split. Now having 753819 GSs.
+Step 16600: 140 GSs pruned. Now having 753679 GSs.
+Step 16700: 33 GSs duplicated, 966 GSs split. Now having 754678 GSs.
+Step 16700: 141 GSs pruned. Now having 754537 GSs.
+Step 16800: 35 GSs duplicated, 931 GSs split. Now having 755503 GSs.
+Step 16800: 141 GSs pruned. Now having 755362 GSs.
+Step 16900: 22 GSs duplicated, 907 GSs split. Now having 756291 GSs.
+Step 16900: 152 GSs pruned. Now having 756139 GSs.
+Step 17000: 41 GSs duplicated, 879 GSs split. Now having 757059 GSs.
+Step 17000: 129 GSs pruned. Now having 756930 GSs.
+Step 17100: 23 GSs duplicated, 981 GSs split. Now having 757934 GSs.
+Step 17100: 145 GSs pruned. Now having 757789 GSs.
+Step 17200: 29 GSs duplicated, 978 GSs split. Now having 758796 GSs.
+Step 17200: 160 GSs pruned. Now having 758636 GSs.
+Step 17300: 33 GSs duplicated, 959 GSs split. Now having 759628 GSs.
+Step 17300: 142 GSs pruned. Now having 759486 GSs.
+Step 17400: 37 GSs duplicated, 924 GSs split. Now having 760447 GSs.
+Step 17400: 148 GSs pruned. Now having 760299 GSs.
+Step 17500: 32 GSs duplicated, 921 GSs split. Now having 761252 GSs.
+Step 17500: 130 GSs pruned. Now having 761122 GSs.
+Step 17600: 15 GSs duplicated, 952 GSs split. Now having 762089 GSs.
+Step 17600: 124 GSs pruned. Now having 761965 GSs.
+Step 17700: 17 GSs duplicated, 881 GSs split. Now having 762863 GSs.
+Step 17700: 139 GSs pruned. Now having 762724 GSs.
+Step 17800: 37 GSs duplicated, 930 GSs split. Now having 763691 GSs.
+Step 17800: 149 GSs pruned. Now having 763542 GSs.
+Step 17900: 48 GSs duplicated, 1043 GSs split. Now having 764633 GSs.
+Step 17900: 147 GSs pruned. Now having 764486 GSs.
+Step 18000: 27 GSs duplicated, 959 GSs split. Now having 765472 GSs.
+Step 18000: 144 GSs pruned. Now having 765328 GSs.
+Step 18100: 21 GSs duplicated, 970 GSs split. Now having 766319 GSs.
+Step 18100: 138 GSs pruned. Now having 766181 GSs.
+Step 18200: 17 GSs duplicated, 926 GSs split. Now having 767124 GSs.
+Step 18200: 146 GSs pruned. Now having 766978 GSs.
+Step 18300: 26 GSs duplicated, 979 GSs split. Now having 767983 GSs.
+Step 18300: 140 GSs pruned. Now having 767843 GSs.
+Step 18400: 23 GSs duplicated, 957 GSs split. Now having 768823 GSs.
+Step 18400: 133 GSs pruned. Now having 768690 GSs.
+Step 18500: 18 GSs duplicated, 954 GSs split. Now having 769662 GSs.
+Step 18500: 124 GSs pruned. Now having 769538 GSs.
+Step 18600: 34 GSs duplicated, 992 GSs split. Now having 770564 GSs.
+Step 18600: 127 GSs pruned. Now having 770437 GSs.
+Step 18700: 18 GSs duplicated, 958 GSs split. Now having 771413 GSs.
+Step 18700: 158 GSs pruned. Now having 771255 GSs.
+Step 18800: 37 GSs duplicated, 985 GSs split. Now having 772277 GSs.
+Step 18800: 152 GSs pruned. Now having 772125 GSs.
+Step 18900: 14 GSs duplicated, 939 GSs split. Now having 773078 GSs.
+Step 18900: 136 GSs pruned. Now having 772942 GSs.
+Step 19000: 17 GSs duplicated, 963 GSs split. Now having 773922 GSs.
+Step 19000: 131 GSs pruned. Now having 773791 GSs.
+Step 19100: 39 GSs duplicated, 1030 GSs split. Now having 774860 GSs.
+Step 19100: 134 GSs pruned. Now having 774726 GSs.
+Step 19200: 19 GSs duplicated, 1020 GSs split. Now having 775765 GSs.
+Step 19200: 138 GSs pruned. Now having 775627 GSs.
+Step 19300: 30 GSs duplicated, 1012 GSs split. Now having 776669 GSs.
+Step 19300: 139 GSs pruned. Now having 776530 GSs.
+Step 19400: 23 GSs duplicated, 998 GSs split. Now having 777551 GSs.
+Step 19400: 110 GSs pruned. Now having 777441 GSs.
+Step 19500: 25 GSs duplicated, 1084 GSs split. Now having 778550 GSs.
+Step 19500: 112 GSs pruned. Now having 778438 GSs.
+Step 19600: 19 GSs duplicated, 1021 GSs split. Now having 779478 GSs.
+Step 19600: 131 GSs pruned. Now having 779347 GSs.
+Step 19700: 23 GSs duplicated, 1068 GSs split. Now having 780438 GSs.
+Step 19700: 122 GSs pruned. Now having 780316 GSs.
+Step 19800: 24 GSs duplicated, 1074 GSs split. Now having 781414 GSs.
+Step 19800: 137 GSs pruned. Now having 781277 GSs.
+Step 19900: 24 GSs duplicated, 1028 GSs split. Now having 782329 GSs.
+Step 19900: 127 GSs pruned. Now having 782202 GSs.
+Step 20000: 17 GSs duplicated, 961 GSs split. Now having 783180 GSs.
+Step 20000: 127 GSs pruned. Now having 783053 GSs.
+Step 20100: 33 GSs duplicated, 919 GSs split. Now having 784005 GSs.
+Step 20100: 128 GSs pruned. Now having 783877 GSs.
+Step 20200: 27 GSs duplicated, 966 GSs split. Now having 784870 GSs.
+Step 20200: 96 GSs pruned. Now having 784774 GSs.
+Step 20300: 8 GSs duplicated, 1061 GSs split. Now having 785843 GSs.
+Step 20300: 101 GSs pruned. Now having 785742 GSs.
+Step 20400: 24 GSs duplicated, 988 GSs split. Now having 786754 GSs.
+Step 20400: 124 GSs pruned. Now having 786630 GSs.
+Step 20500: 21 GSs duplicated, 948 GSs split. Now having 787599 GSs.
+Step 20500: 124 GSs pruned. Now having 787475 GSs.
+Step 20600: 30 GSs duplicated, 1036 GSs split. Now having 788541 GSs.
+Step 20600: 134 GSs pruned. Now having 788407 GSs.
+Step 20700: 21 GSs duplicated, 1101 GSs split. Now having 789529 GSs.
+Step 20700: 146 GSs pruned. Now having 789383 GSs.
+Step 20800: 27 GSs duplicated, 1047 GSs split. Now having 790457 GSs.
+Step 20800: 119 GSs pruned. Now having 790338 GSs.
+Step 20900: 25 GSs duplicated, 1041 GSs split. Now having 791404 GSs.
+Step 20900: 94 GSs pruned. Now having 791310 GSs.
+Step 21000: 17 GSs duplicated, 947 GSs split. Now having 792274 GSs.
+Step 21000: 105 GSs pruned. Now having 792169 GSs.
+Step 21100: 14 GSs duplicated, 1039 GSs split. Now having 793222 GSs.
+Step 21100: 113 GSs pruned. Now having 793109 GSs.
+Step 21200: 31 GSs duplicated, 1059 GSs split. Now having 794199 GSs.
+Step 21200: 115 GSs pruned. Now having 794084 GSs.
+Step 21300: 10 GSs duplicated, 1071 GSs split. Now having 795165 GSs.
+Step 21300: 122 GSs pruned. Now having 795043 GSs.
+Step 21400: 25 GSs duplicated, 1174 GSs split. Now having 796242 GSs.
+Step 21400: 115 GSs pruned. Now having 796127 GSs.
+Step 21500: 16 GSs duplicated, 1118 GSs split. Now having 797261 GSs.
+Step 21500: 111 GSs pruned. Now having 797150 GSs.
+Step 21600: 11 GSs duplicated, 1050 GSs split. Now having 798211 GSs.
+Step 21600: 117 GSs pruned. Now having 798094 GSs.
+Step 21700: 12 GSs duplicated, 1103 GSs split. Now having 799209 GSs.
+Step 21700: 94 GSs pruned. Now having 799115 GSs.
+Step 21800: 17 GSs duplicated, 1113 GSs split. Now having 800245 GSs.
+Step 21800: 92 GSs pruned. Now having 800153 GSs.
+Step 21900: 28 GSs duplicated, 1067 GSs split. Now having 801248 GSs.
+Step 21900: 116 GSs pruned. Now having 801132 GSs.
+Step 22000: 18 GSs duplicated, 1051 GSs split. Now having 802201 GSs.
+Step 22000: 101 GSs pruned. Now having 802100 GSs.
+Step 22100: 29 GSs duplicated, 1150 GSs split. Now having 803279 GSs.
+Step 22100: 112 GSs pruned. Now having 803167 GSs.
+Step 22200: 14 GSs duplicated, 1089 GSs split. Now having 804270 GSs.
+Step 22200: 103 GSs pruned. Now having 804167 GSs.
+Step 22300: 22 GSs duplicated, 980 GSs split. Now having 805169 GSs.
+Step 22300: 107 GSs pruned. Now having 805062 GSs.
+Step 22400: 23 GSs duplicated, 1153 GSs split. Now having 806238 GSs.
+Step 22400: 97 GSs pruned. Now having 806141 GSs.
+Step 22500: 27 GSs duplicated, 1116 GSs split. Now having 807284 GSs.
+Step 22500: 89 GSs pruned. Now having 807195 GSs.
+Step 22600: 27 GSs duplicated, 1164 GSs split. Now having 808386 GSs.
+Step 22600: 108 GSs pruned. Now having 808278 GSs.
+Step 22700: 22 GSs duplicated, 1221 GSs split. Now having 809521 GSs.
+Step 22700: 80 GSs pruned. Now having 809441 GSs.
+Step 22800: 23 GSs duplicated, 1134 GSs split. Now having 810598 GSs.
+Step 22800: 109 GSs pruned. Now having 810489 GSs.
+Step 22900: 14 GSs duplicated, 1174 GSs split. Now having 811677 GSs.
+Step 22900: 95 GSs pruned. Now having 811582 GSs.
+Step 23000: 15 GSs duplicated, 1169 GSs split. Now having 812766 GSs.
+Step 23000: 110 GSs pruned. Now having 812656 GSs.
+Step 23100: 20 GSs duplicated, 1091 GSs split. Now having 813767 GSs.
+Step 23100: 115 GSs pruned. Now having 813652 GSs.
+Step 23200: 22 GSs duplicated, 1162 GSs split. Now having 814836 GSs.
+Step 23200: 99 GSs pruned. Now having 814737 GSs.
+Step 23300: 38 GSs duplicated, 1207 GSs split. Now having 815982 GSs.
+Step 23300: 104 GSs pruned. Now having 815878 GSs.
+Step 23400: 11 GSs duplicated, 1219 GSs split. Now having 817108 GSs.
+Step 23400: 97 GSs pruned. Now having 817011 GSs.
+Step 23500: 34 GSs duplicated, 1082 GSs split. Now having 818127 GSs.
+Step 23500: 95 GSs pruned. Now having 818032 GSs.
+Step 23600: 16 GSs duplicated, 1272 GSs split. Now having 819320 GSs.
+Step 23600: 83 GSs pruned. Now having 819237 GSs.
+Step 23700: 13 GSs duplicated, 1210 GSs split. Now having 820460 GSs.
+Step 23700: 87 GSs pruned. Now having 820373 GSs.
+Step 23800: 16 GSs duplicated, 1170 GSs split. Now having 821559 GSs.
+Step 23800: 80 GSs pruned. Now having 821479 GSs.
+Step 23900: 32 GSs duplicated, 1213 GSs split. Now having 822724 GSs.
+Step 23900: 97 GSs pruned. Now having 822627 GSs.
+Step 24000: 34 GSs duplicated, 1282 GSs split. Now having 823943 GSs.
+Step 24000: 102 GSs pruned. Now having 823841 GSs.
+Step 24100: 16 GSs duplicated, 1017 GSs split. Now having 824874 GSs.
+Step 24100: 100 GSs pruned. Now having 824774 GSs.
+Step 24200: 15 GSs duplicated, 1217 GSs split. Now having 826006 GSs.
+Step 24200: 95 GSs pruned. Now having 825911 GSs.
+Step 24300: 16 GSs duplicated, 1009 GSs split. Now having 826936 GSs.
+Step 24300: 99 GSs pruned. Now having 826837 GSs.
+Step 24400: 14 GSs duplicated, 1129 GSs split. Now having 827980 GSs.
+Step 24400: 80 GSs pruned. Now having 827900 GSs.
+Step 24500: 16 GSs duplicated, 1228 GSs split. Now having 829144 GSs.
+Step 24500: 104 GSs pruned. Now having 829040 GSs.
+Step 24600: 13 GSs duplicated, 1135 GSs split. Now having 830188 GSs.
+Step 24600: 91 GSs pruned. Now having 830097 GSs.
+Step 24700: 16 GSs duplicated, 1116 GSs split. Now having 831229 GSs.
+Step 24700: 88 GSs pruned. Now having 831141 GSs.
+Step 24800: 30 GSs duplicated, 1128 GSs split. Now having 832299 GSs.
+Step 24800: 86 GSs pruned. Now having 832213 GSs.
+Step 24900: 13 GSs duplicated, 1114 GSs split. Now having 833340 GSs.
+Step 24900: 78 GSs pruned. Now having 833262 GSs.
+Step 25000: 10 GSs duplicated, 1163 GSs split. Now having 834435 GSs.
+Step 25000: 99 GSs pruned. Now having 834336 GSs.
+Step 25100: 14 GSs duplicated, 1068 GSs split. Now having 835418 GSs.
+Step 25100: 82 GSs pruned. Now having 835336 GSs.
+Step 25200: 19 GSs duplicated, 1185 GSs split. Now having 836540 GSs.
+Step 25200: 93 GSs pruned. Now having 836447 GSs.
+Step 25300: 21 GSs duplicated, 1206 GSs split. Now having 837674 GSs.
+Step 25300: 102 GSs pruned. Now having 837572 GSs.
+Step 25400: 33 GSs duplicated, 1078 GSs split. Now having 838683 GSs.
+Step 25400: 108 GSs pruned. Now having 838575 GSs.
+Step 25500: 10 GSs duplicated, 1074 GSs split. Now having 839659 GSs.
+Step 25500: 107 GSs pruned. Now having 839552 GSs.
+Step 25600: 17 GSs duplicated, 1046 GSs split. Now having 840615 GSs.
+Step 25600: 77 GSs pruned. Now having 840538 GSs.
+Step 25700: 12 GSs duplicated, 1083 GSs split. Now having 841633 GSs.
+Step 25700: 85 GSs pruned. Now having 841548 GSs.
+Step 25800: 13 GSs duplicated, 942 GSs split. Now having 842503 GSs.
+Step 25800: 75 GSs pruned. Now having 842428 GSs.
+Step 25900: 23 GSs duplicated, 1042 GSs split. Now having 843493 GSs.
+Step 25900: 74 GSs pruned. Now having 843419 GSs.
+Step:  29999 {'mem': 1.5128135681152344, 'ellipse_time': 1459.5234513282776, 'num_GS': 843419}
+Running evaluation...
+PSNR: 33.313, SSIM: 0.9555, LPIPS: 0.051 Time: 0.006s/image Number of GS: 843419
+Running trajectory rendering...
+Video saved to results/train/filtered/videos/traj_29999.mp4
+
+Finding latest checkpoint in: results/train/filtered/ckpts
+Generating alignment transform at results/train/filtered/alignments/test_to_train.npz
+Warning: image_path not found for reconstruction
+[Parser] 186 images, taken by 186 cameras.
+Warning: image_path not found for reconstruction
+[Parser] 19 images, taken by 19 cameras.
+Wrote alignment transform to /home/wl757/multiplexed-pixels/gsplat/results/train/filtered/alignments/test_to_train.npz
+Precomputing covisible masks for external eval dataset...
+Warning: image_path not found for reconstruction
+[Parser] 19 images, taken by 19 cameras.
+Warning: image_path not found for reconstruction
+[Parser] 186 images, taken by 186 cameras.
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+[covisible] CUDA OOM detected; retrying with sub-batch size 4
+[covisible] CUDA OOM detected; retrying with sub-batch size 2
+Using dataset transform: results/train/filtered/alignments/test_to_train.npz
+Executing external eval: python examples/simple_trainer.py default                 --disable_viewer                 --data_factor 1                 --data_dir "../gs7/input_data/dog/iphone4_shared/subsets/test"                 --result_dir "results/train/filtered/eval_on_test"                 --ckpt "results/train/filtered/ckpts/ckpt_29999_rank0.pt"                 --test_every 1 --dataset_transform_path "results/train/filtered/alignments/test_to_train.npz" --eval_use_covisible --eval_covisible_dir "results/train/filtered/covisible/test/1x"
+Warning: image_path not found for reconstruction
+[Parser] 19 images, taken by 19 cameras.
+Training set size: 0
+Scene scale: 2.854575622823358
+Model initialized. Number of GS: 379538
+Running evaluation...
+PSNR: 19.545, SSIM: 0.8171, LPIPS: 0.243 Time: 0.088s/image Number of GS: 843419
+Running trajectory rendering...
+Video saved to results/train/filtered/eval_on_test/videos/traj_29999.mp4
+
+==========================================
+ARRAY TASK 1 COMPLETE
+==========================================

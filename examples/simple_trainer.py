@@ -5,9 +5,9 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
-import imageio
+import imageio.v3 as iio
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -16,12 +16,15 @@ import tyro
 import viser
 import yaml
 from datasets.colmap import Dataset, Parser
+from datasets.normalize import transform_cameras, transform_points
 from datasets.traj import (
     generate_ellipse_path_z,
     generate_interpolated_path,
     generate_spiral_path,
 )
 from fused_ssim import fused_ssim
+from gsplat_viewer import GsplatRenderTabState, GsplatViewer
+from nerfview import CameraState, RenderTabState, apply_float_colormap
 from torch import Tensor
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
@@ -36,8 +39,6 @@ from gsplat.distributed import cli
 from gsplat.optimizers import SelectiveAdam
 from gsplat.rendering import rasterization
 from gsplat.strategy import DefaultStrategy, MCMCStrategy
-from gsplat_viewer import GsplatViewer, GsplatRenderTabState
-from nerfview import CameraState, RenderTabState, apply_float_colormap
 
 
 @dataclass
@@ -125,9 +126,24 @@ class Config:
     antialiased: bool = False
     # Match string for training images
     match_string: Optional[str] = None
+    # Match string for evaluation images; defaults to match_string when not set
+    eval_match_string: Optional[str] = None
+    # Optional path to newline-separated list of training image names
+    train_list: Optional[str] = None
+
+    # Use covisible masks (if available) for evaluation metrics
+    eval_use_covisible: bool = False
+    # Optional explicit path to covisible masks root. If not set and
+    # eval_use_covisible is True, defaults to f"{data_dir}/covisible/{data_factor}x"
+    eval_covisible_dir: Optional[str] = None
+    # Optional path to a 4x4 transform (npy/npz) aligning this dataset to a
+    # pretrained run's coordinate frame.
+    dataset_transform_path: Optional[str] = None
 
     # Use random background for training to discourage transparency
     random_bkgd: bool = False
+    # Use white background for training
+    white_bg: bool = False
 
     # LR for 3D point positions
     means_lr: float = 1.6e-4
@@ -316,6 +332,24 @@ class Runner:
         self.world_size = world_size
         self.device = f"cuda:{local_rank}"
 
+        train_image_names: Optional[Set[str]] = None
+        train_list_path: Optional[Path] = None
+        if cfg.train_list:
+            train_list_path = Path(cfg.train_list).expanduser()
+            if not train_list_path.is_file():
+                raise FileNotFoundError(
+                    f"Training list file '{train_list_path}' does not exist."
+                )
+            train_list_path = train_list_path.resolve()
+            with open(train_list_path, "r", encoding="utf-8") as handle:
+                train_image_names = {
+                    line.strip() for line in handle.readlines() if line.strip()
+                }
+            if not train_image_names:
+                raise ValueError(
+                    f"Training list file '{train_list_path}' does not contain any image names."
+                )
+
         # Where to dump results.
         os.makedirs(cfg.result_dir, exist_ok=True)
 
@@ -329,6 +363,17 @@ class Runner:
         self.ply_dir = f"{cfg.result_dir}/ply"
         os.makedirs(self.ply_dir, exist_ok=True)
 
+        # Determine covisible directory for evaluation masks if requested
+        self.covisible_root: Optional[Path] = None
+        self._warned_missing_covisible = False
+        if cfg.eval_use_covisible:
+            root = (
+                Path(cfg.eval_covisible_dir).expanduser()
+                if cfg.eval_covisible_dir
+                else Path(cfg.data_dir) / "covisible" / f"{cfg.data_factor}x"
+            )
+            self.covisible_root = root
+
         # Tensorboard
         self.writer = SummaryWriter(log_dir=f"{cfg.result_dir}/tb")
 
@@ -339,14 +384,58 @@ class Runner:
             normalize=cfg.normalize_world_space,
             test_every=cfg.test_every,
         )
+        if cfg.dataset_transform_path is not None:
+            transform_path = Path(cfg.dataset_transform_path).expanduser()
+            if not transform_path.exists():
+                raise FileNotFoundError(
+                    f"Dataset transform file '{transform_path}' does not exist."
+                )
+            loaded = np.load(transform_path)
+            if isinstance(loaded, np.ndarray):
+                align_transform = loaded
+            elif isinstance(loaded, np.lib.npyio.NpzFile) and "align_transform" in loaded:
+                align_transform = loaded["align_transform"]
+                loaded.close()
+            else:
+                raise KeyError(
+                    f"Dataset transform '{transform_path}' does not contain 'align_transform'."
+                )
+            align_transform = np.asarray(align_transform, dtype=np.float32)
+            self.parser.camtoworlds = transform_cameras(
+                align_transform, self.parser.camtoworlds
+            )
+            self.parser.points = transform_points(align_transform, self.parser.points)
+            self.parser.transform = align_transform @ self.parser.transform
+            camera_locations = self.parser.camtoworlds[:, :3, 3]
+            scene_center = np.mean(camera_locations, axis=0)
+            dists = np.linalg.norm(camera_locations - scene_center, axis=1)
+            self.parser.scene_scale = np.max(dists)
+        if train_image_names is not None:
+            parser_image_names = set(self.parser.image_names)
+            missing_images = sorted(train_image_names - parser_image_names)
+            if missing_images:
+                raise ValueError(
+                    "Training list contains images that are not part of the parsed dataset. "
+                    f"First missing entry: '{missing_images[0]}'."
+                )
+            print(
+                f"Training image subset: {len(train_image_names)} images from {train_list_path}"
+            )
         self.trainset = Dataset(
             self.parser,
             split="train",
             patch_size=cfg.patch_size,
             load_depths=cfg.depth_loss,
             match_string=cfg.match_string,
+            selected_images=train_image_names,
         )
-        self.valset = Dataset(self.parser, split="val")
+        print("Training set size:", len(self.trainset))
+        val_match_string = cfg.eval_match_string or cfg.match_string
+        self.valset = Dataset(
+            self.parser,
+            split="val",
+            match_string=val_match_string,
+        )
         self.scene_scale = self.parser.scene_scale * 1.1 * cfg.global_scale
         print("Scene scale:", self.scene_scale)
 
@@ -670,7 +759,9 @@ class Runner:
                     image_ids.unsqueeze(-1),
                 )["rgb"]
 
-            if cfg.random_bkgd:
+            if cfg.white_bg:
+                colors = colors + (1.0 - alphas)
+            elif cfg.random_bkgd:
                 bkgd = torch.rand(1, 3, device=device)
                 colors = colors + bkgd * (1.0 - alphas)
 
@@ -719,7 +810,7 @@ class Runner:
 
             loss.backward()
 
-            desc = f"loss={loss.item():.3f}| " f"sh degree={sh_degree_to_use}| "
+            desc = f"loss={loss.item():.3f}| sh degree={sh_degree_to_use}| "
             if cfg.depth_loss:
                 desc += f"depth loss={depthloss.item():.6f}| "
             if cfg.pose_opt and cfg.pose_noise:
@@ -785,7 +876,6 @@ class Runner:
             if (
                 step in [i - 1 for i in cfg.ply_steps] or step == max_steps - 1
             ) and cfg.save_ply:
-
                 if self.cfg.app_opt:
                     # eval at origin to bake the appeareance into the colors
                     rgb = self.app_module(
@@ -928,7 +1018,7 @@ class Runner:
 
             torch.cuda.synchronize()
             tic = time.time()
-            colors, _, _ = self.rasterize_splats(
+            colors, alphas, _ = self.rasterize_splats(
                 camtoworlds=camtoworlds,
                 Ks=Ks,
                 width=width,
@@ -941,14 +1031,54 @@ class Runner:
             torch.cuda.synchronize()
             ellipse_time += max(time.time() - tic, 1e-10)
 
+            if cfg.white_bg:
+                colors = colors + (1.0 - alphas)
+
             colors = torch.clamp(colors, 0.0, 1.0)
+            # Optionally apply covisible mask for evaluation metrics (and previews)
+            if self.covisible_root is not None:
+                try:
+                    # Map dataset index to original image name
+                    # Note: DataLoader yields in-order items for shuffle=False
+                    dataset_index = self.valset.indices[i]
+                    image_name = self.parser.image_names[dataset_index]
+                    # Covisible mask path mirrors the image name with .png suffix under split dir
+                    covisible_dir = self.covisible_root / stage
+                    mask_path = covisible_dir / (Path(image_name).with_suffix(".png"))
+                    # If nested directories exist in image name, ensure we can read
+                    mask_np = iio.imread(mask_path.as_posix())
+                    if mask_np.ndim == 3:
+                        mask_np = mask_np[..., 0]
+                    mask_t = torch.from_numpy((mask_np > 127).astype(np.float32)).to(
+                        device
+                    )
+                    if mask_t.shape[0] != height or mask_t.shape[1] != width:
+                        # Resize nearest to match image size
+                        mask_t = torch.nn.functional.interpolate(
+                            mask_t[None, None, ...],
+                            size=(height, width),
+                            mode="nearest",
+                        )[0, 0]
+                    mask_t = mask_t[..., None]  # [H, W, 1]
+                    # Broadcast to [1, H, W, 1]
+                    mask_t = mask_t[None, ...]
+                    # Apply masked comparison: outside mask, set pred=gt
+                    colors = colors * mask_t + pixels * (1.0 - mask_t)
+                except Exception as e:
+                    if not self._warned_missing_covisible:
+                        print(
+                            f"Warning: Failed to load covisible mask for evaluation (first occurrence). "
+                            f"Continuing without masks. Error: {e}"
+                        )
+                        self._warned_missing_covisible = True
+
             canvas_list = [pixels, colors]
 
             if world_rank == 0:
                 # write images
                 canvas = torch.cat(canvas_list, dim=2).squeeze(0).cpu().numpy()
                 canvas = (canvas * 255).astype(np.uint8)
-                imageio.imwrite(
+                iio.imwrite(
                     f"{self.render_dir}/{stage}_step{step}_{i:04d}.png",
                     canvas,
                 )
@@ -1043,32 +1173,30 @@ class Runner:
         # save to video
         video_dir = f"{cfg.result_dir}/videos"
         os.makedirs(video_dir, exist_ok=True)
-        writer = imageio.get_writer(f"{video_dir}/traj_{step}.mp4", fps=30)
-        for i in tqdm.trange(len(camtoworlds_all), desc="Rendering trajectory"):
-            camtoworlds = camtoworlds_all[i : i + 1]
-            Ks = K[None]
+        video_path = f"{video_dir}/traj_{step}.mp4"
+        with iio.imopen(video_path, "w", plugin="pyav", codec="mpeg4", fps=30) as writer:
+            for frame_idx in tqdm.trange(len(camtoworlds_all), desc="Rendering trajectory"):
+                camtoworlds = camtoworlds_all[frame_idx : frame_idx + 1]
+                Ks_ = K[None]
 
-            renders, _, _ = self.rasterize_splats(
-                camtoworlds=camtoworlds,
-                Ks=Ks,
-                width=width,
-                height=height,
-                sh_degree=cfg.sh_degree,
-                near_plane=cfg.near_plane,
-                far_plane=cfg.far_plane,
-                render_mode="RGB+ED",
-            )  # [1, H, W, 4]
-            colors = torch.clamp(renders[..., 0:3], 0.0, 1.0)  # [1, H, W, 3]
-            depths = renders[..., 3:4]  # [1, H, W, 1]
-            depths = (depths - depths.min()) / (depths.max() - depths.min())
-            canvas_list = [colors, depths.repeat(1, 1, 1, 3)]
-
-            # write images
-            canvas = torch.cat(canvas_list, dim=2).squeeze(0).cpu().numpy()
-            canvas = (canvas * 255).astype(np.uint8)
-            writer.append_data(canvas)
-        writer.close()
-        print(f"Video saved to {video_dir}/traj_{step}.mp4")
+                renders, alphas, _ = self.rasterize_splats(
+                    camtoworlds=camtoworlds,
+                    Ks=Ks_,
+                    width=width,
+                    height=height,
+                    sh_degree=cfg.sh_degree,
+                    near_plane=cfg.near_plane,
+                    far_plane=cfg.far_plane,
+                    render_mode="RGB+ED",
+                )  # [1, H, W, 4]
+                colors = renders[..., 0:3]  # [1, H, W, 3]
+                if cfg.white_bg:
+                    colors = colors + (1.0 - alphas)
+                colors = torch.clamp(colors, 0.0, 1.0)
+                canvas = colors.squeeze(0).cpu().numpy()
+                canvas = (canvas * 255).astype(np.uint8)
+                writer.write(canvas)
+        print(f"Video saved to {video_path}")
 
     @torch.no_grad()
     def run_compression(self, step: int):
@@ -1237,6 +1365,8 @@ if __name__ == "__main__":
                 slice,
                 total_variation_loss,
             )
+
+            print("imported fused bilagrid")
         else:
             cfg.use_bilateral_grid = True
             from lib_bilagrid import (
@@ -1249,8 +1379,7 @@ if __name__ == "__main__":
     # try import extra dependencies
     if cfg.compression == "png":
         try:
-            import plas
-            import torchpq
+            pass
         except:
             raise ImportError(
                 "To use PNG compression, you need to install "

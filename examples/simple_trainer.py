@@ -1174,7 +1174,8 @@ class Runner:
         video_dir = f"{cfg.result_dir}/videos"
         os.makedirs(video_dir, exist_ok=True)
         video_path = f"{video_dir}/traj_{step}.mp4"
-        with iio.imopen(video_path, "w", plugin="pyav", codec="mpeg4", fps=30) as writer:
+        with iio.imopen(video_path, "w", plugin="pyav") as writer:
+            writer.init_video_stream("libx264", fps=30)
             for frame_idx in tqdm.trange(len(camtoworlds_all), desc="Rendering trajectory"):
                 camtoworlds = camtoworlds_all[frame_idx : frame_idx + 1]
                 Ks_ = K[None]
@@ -1195,7 +1196,7 @@ class Runner:
                 colors = torch.clamp(colors, 0.0, 1.0)
                 canvas = colors.squeeze(0).cpu().numpy()
                 canvas = (canvas * 255).astype(np.uint8)
-                writer.write(canvas)
+                writer.write_frame(canvas, pixel_format="rgb24")
         print(f"Video saved to {video_path}")
 
     @torch.no_grad()
@@ -1294,6 +1295,14 @@ def main(local_rank: int, world_rank, world_size: int, cfg: Config):
         cfg.disable_viewer = True
         if world_rank == 0:
             print("Viewer is disabled in distributed training.")
+    ckpt_probe = None
+    if cfg.ckpt is not None:
+        try:
+            ckpt_probe = torch.load(cfg.ckpt[0], map_location="cpu", weights_only=True)
+        except TypeError:
+            ckpt_probe = torch.load(cfg.ckpt[0], map_location="cpu")
+        if not cfg.pose_opt and "pose_adjust" in ckpt_probe:
+            cfg.pose_opt = True
 
     runner = Runner(local_rank, world_rank, world_size, cfg)
 
@@ -1305,6 +1314,19 @@ def main(local_rank: int, world_rank, world_size: int, cfg: Config):
         ]
         for k in runner.splats.keys():
             runner.splats[k].data = torch.cat([ckpt["splats"][k] for ckpt in ckpts])
+        if cfg.pose_opt and ckpt_probe is not None and "pose_adjust" in ckpt_probe:
+            pose_state = ckpts[0]["pose_adjust"]
+            stored_size = pose_state["embeds.weight"].shape[0]
+            target = runner.pose_adjust
+            if isinstance(target, torch.nn.parallel.DistributedDataParallel):
+                target = target.module
+            current_size = target.embeds.weight.shape[0]
+            if current_size != stored_size:
+                target = CameraOptModule(stored_size).to(runner.device)
+                target.load_state_dict(pose_state)
+                runner.pose_adjust = target
+            else:
+                target.load_state_dict(pose_state)
         step = ckpts[0]["step"]
         runner.eval(step=step)
         runner.render_traj(step=step)

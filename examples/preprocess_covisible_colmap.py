@@ -299,11 +299,13 @@ def compute_covisible_for_base(
                         success = True
                         _empty_cache(device)
                     except RuntimeError as e:
-                        if "out of memory" in str(e).lower() and attempt > 1:
+                        error_msg = str(e).lower()
+                        is_oom = "out of memory" in error_msg or "integer out of range" in error_msg
+                        if is_oom and attempt > 1:
                             new_attempt = max(1, attempt // 2)
                             if new_attempt != attempt:
                                 print(
-                                    f"[covisible] CUDA OOM detected; retrying with sub-batch size {new_attempt}",
+                                    f"[covisible] CUDA OOM detected ({str(e)[:50]}...); retrying with sub-batch size {new_attempt}",
                                     flush=True,
                                 )
                             attempt = new_attempt

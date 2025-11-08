@@ -205,6 +205,7 @@ def compute_covisible_for_base(
     B = len(base_rgbs)
 
     max_micro = max(1, micro_chunk if micro_chunk is not None else chunk)
+    adaptive_cap = max_micro
 
     # Iterate base images, compute occlusion against all support frames
     for bi in tqdm(range(B), desc="Dumping covisible"):
@@ -218,7 +219,7 @@ def compute_covisible_for_base(
 
             remaining = end - start
             sub_offset = 0
-            current_cap = min(max_micro, remaining)
+            current_cap = min(adaptive_cap, remaining)
 
             while sub_offset < remaining:
                 attempt = min(current_cap, remaining - sub_offset)
@@ -299,15 +300,29 @@ def compute_covisible_for_base(
                         success = True
                         _empty_cache(device)
                     except RuntimeError as e:
-                        error_msg = str(e).lower()
-                        is_oom = "out of memory" in error_msg or "integer out of range" in error_msg
-                        if is_oom and attempt > 1:
+                        err_lower = str(e).lower()
+                        oom_like = (
+                            "out of memory" in err_lower
+                            or "integer out of range" in err_lower
+                        )
+                        cudnn_not_supported = (
+                            "cudnn_status_not_supported" in err_lower
+                            or "grid_sample" in err_lower
+                            or "grid_sampler" in err_lower
+                        )
+                        if (oom_like or cudnn_not_supported) and attempt > 1:
                             new_attempt = max(1, attempt // 2)
                             if new_attempt != attempt:
+                                reason = (
+                                    "CUDA OOM"
+                                    if oom_like
+                                    else "cuDNN error (likely fragmentation)"
+                                )
                                 print(
-                                    f"[covisible] CUDA OOM detected ({str(e)[:50]}...); retrying with sub-batch size {new_attempt}",
+                                    f"[covisible] {reason}; retrying with sub-batch size {new_attempt}",
                                     flush=True,
                                 )
+                                adaptive_cap = min(adaptive_cap, new_attempt)
                             attempt = new_attempt
                             _empty_cache(device)
                             continue

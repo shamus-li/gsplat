@@ -3,6 +3,7 @@
 #SBATCH --output=slurm_logs/static_train_%A_%a.out
 #SBATCH --error=slurm_logs/static_train_%A_%a.err
 #SBATCH --partition=monakhova
+#SBATCH --exclude=lil-compute-05,unicorn-compute-01,bhattacharjee-compute-02,awang-compute-01,kim-compute-03,kim-compute-04,kim-compute-05
 #SBATCH --gres=gpu:1
 #SBATCH --constraint="gpu-high"
 #SBATCH -N 1
@@ -48,9 +49,33 @@ PREP_ROOT=${PREP_ROOT:-"$SCENE_DIR/static/shared"}
 RESULT_ROOT=${RESULT_ROOT:-"results/static"}
 TRAIN_TEST_EVERY=${TRAIN_TEST_EVERY:-1}
 EVAL_TEST_EVERY=${EVAL_TEST_EVERY:-1}
-COVI_CHUNK=${COVI_CHUNK:-32}
-COVI_MICRO_CHUNK=${COVI_MICRO_CHUNK:-8}
+COVI_BATCH_SIZE=${COVI_BATCH_SIZE:-${COVI_CHUNK:-32}}
+COVI_NUM_WORKERS=${COVI_NUM_WORKERS:-${COVI_MICRO_CHUNK:-4}}
 COVI_DEVICE=${COVI_DEVICE:-cuda}
+REBUILD_COVISIBLE=${REBUILD_COVISIBLE:-0}
+COVI_NUM_MIN_FRAMES=${COVI_NUM_MIN_FRAMES:-3}
+COVI_MIN_FRAME_RATIO=${COVI_MIN_FRAME_RATIO:-0.05}
+COVI_MAX_HW=${COVI_MAX_HW:-0}
+CLOSEST_EVAL_COUNT=${CLOSEST_EVAL_COUNT:-3}
+
+CAMERA_COVI_BATCH_SIZE=$COVI_BATCH_SIZE
+CAMERA_COVI_NUM_WORKERS=$COVI_NUM_WORKERS
+CAMERA_COVI_NUM_MIN_FRAMES=$COVI_NUM_MIN_FRAMES
+CAMERA_COVI_MIN_FRAME_RATIO=$COVI_MIN_FRAME_RATIO
+CAMERA_COVI_MAX_HW=$COVI_MAX_HW
+
+case "$CAMERA" in
+    iphone)
+        CAMERA_COVI_NUM_MIN_FRAMES=${IPHONE_COVI_NUM_MIN_FRAMES:-1}
+        CAMERA_COVI_MIN_FRAME_RATIO=${IPHONE_COVI_MIN_FRAME_RATIO:-0.05}
+        ;;
+    stereo)
+        CAMERA_COVI_BATCH_SIZE=${STEREO_COVI_BATCH_SIZE:-${STEREO_COVI_CHUNK:-8}}
+        CAMERA_COVI_NUM_WORKERS=${STEREO_COVI_NUM_WORKERS:-${STEREO_COVI_MICRO_CHUNK:-4}}
+        CAMERA_COVI_NUM_MIN_FRAMES=${STEREO_COVI_NUM_MIN_FRAMES:-1}
+        CAMERA_COVI_MIN_FRAME_RATIO=${STEREO_COVI_MIN_FRAME_RATIO:-0.5}
+        ;;
+esac
 
 SENTINEL="$PREP_ROOT/.prep_complete"
 if [ ! -f "$SENTINEL" ]; then
@@ -73,6 +98,59 @@ fi
 
 RESULT_DIR="$RESULT_ROOT/$SCENE_NAME/$CAMERA"
 mkdir -p "$RESULT_DIR" slurm_logs
+EVAL_LIST_PATH="$RESULT_DIR/closest_eval_images.txt"
+
+python - "$DATA_DIR" "$EVAL_DIR" "$EVAL_LIST_PATH" "$CLOSEST_EVAL_COUNT" "$TRAIN_TEST_EVERY" "$EVAL_TEST_EVERY" <<'PY'
+import sys
+from pathlib import Path
+
+import numpy as np
+
+sys.path.append('examples')
+from datasets.colmap import Parser  # noqa: E402
+
+train_dir = Path(sys.argv[1]).resolve()
+eval_dir = Path(sys.argv[2]).resolve()
+out_path = Path(sys.argv[3]).resolve()
+k = int(sys.argv[4])
+train_every = int(sys.argv[5])
+eval_every = int(sys.argv[6])
+
+train_parser = Parser(
+    data_dir=str(train_dir),
+    factor=1,
+    normalize=False,
+    test_every=train_every,
+)
+eval_parser = Parser(
+    data_dir=str(eval_dir),
+    factor=1,
+    normalize=False,
+    test_every=eval_every,
+)
+
+train_centers = train_parser.camtoworlds[:, :3, 3]
+eval_centers = eval_parser.camtoworlds[:, :3, 3]
+
+if train_centers.size == 0 or eval_centers.size == 0:
+    raise SystemExit("Insufficient cameras available to select eval subset.")
+
+dists = []
+for idx, name in enumerate(eval_parser.image_names):
+    center = eval_centers[idx]
+    min_dist = float(np.linalg.norm(train_centers - center, axis=1).min())
+    dists.append((min_dist, name))
+dists.sort()
+limit = len(dists) if k <= 0 else min(k, len(dists))
+selected = [name for _, name in dists[:limit]]
+
+out_path.parent.mkdir(parents=True, exist_ok=True)
+with out_path.open('w', encoding='utf-8') as handle:
+    for name in selected:
+        handle.write(f"{name}\n")
+
+print(f"Selected {len(selected)} eval frames (k={k}) for {eval_dir}: {selected}")
+PY
 
 COVI_ROOT="$PREP_ROOT/covisible/$CAMERA"
 COVI_DIR="$COVI_ROOT/1x"
@@ -91,11 +169,30 @@ echo "Result dir: $RESULT_DIR"
 echo "Prep root: $PREP_ROOT"
 echo "Covisible dir: $COVI_DIR"
 echo "Alignment: $ALIGN_PATH"
+echo "Rebuild covisible: $REBUILD_COVISIBLE"
+echo "Covisible batch size: $CAMERA_COVI_BATCH_SIZE"
+echo "Covisible dataloader workers: $CAMERA_COVI_NUM_WORKERS"
+echo "Covisible min frames: $CAMERA_COVI_NUM_MIN_FRAMES"
+echo "Covisible min ratio: $CAMERA_COVI_MIN_FRAME_RATIO"
+echo "Covisible max HW: $CAMERA_COVI_MAX_HW"
 echo "=========================================="
 echo ""
 
+# Optionally drop cached covisible masks so they can be regenerated.
+if [ "$REBUILD_COVISIBLE" = "1" ] && [ -d "$COVI_ROOT" ]; then
+    echo "REBUILD_COVISIBLE=1 -> removing cached covisible masks at $COVI_ROOT"
+    rm -rf "$COVI_ROOT"
+fi
+
+MICRO_CHUNK_ARGS=()
+COVI_MAX_HW_ARGS=()
+if [ "${CAMERA_COVI_MAX_HW}" != "0" ]; then
+    COVI_MAX_HW_ARGS=(--max_hw "$CAMERA_COVI_MAX_HW")
+fi
+NUM_WORKER_ARGS=(--num_workers "$CAMERA_COVI_NUM_WORKERS")
+
 # Ensure covisible masks exist
-if [ ! -d "$COVI_DIR/val" ]; then
+if [ "$REBUILD_COVISIBLE" = "1" ] || [ ! -d "$COVI_DIR/val" ]; then
     echo "Computing covisible masks for $CAMERA..."
     python examples/preprocess_covisible_colmap.py \
         --base_dir "$EVAL_DIR" \
@@ -105,9 +202,12 @@ if [ ! -d "$COVI_DIR/val" ]; then
         --factor 1 \
         --test_every "$EVAL_TEST_EVERY" \
         --support_test_every "$TRAIN_TEST_EVERY" \
-        --chunk "$COVI_CHUNK" \
-        ${COVI_MICRO_CHUNK:+--micro_chunk "$COVI_MICRO_CHUNK"} \
+        --batch_size "$CAMERA_COVI_BATCH_SIZE" \
+        "${NUM_WORKER_ARGS[@]}" \
         --device "$COVI_DEVICE" \
+        --num_min_frames "$CAMERA_COVI_NUM_MIN_FRAMES" \
+        --min_frame_ratio "$CAMERA_COVI_MIN_FRAME_RATIO" \
+        "${COVI_MAX_HW_ARGS[@]}" \
         --output_dir "$COVI_ROOT"
 else
     echo "Covisible masks already exist at $COVI_DIR/val"
@@ -170,8 +270,7 @@ if [ "${SKIP_TRAIN:-0}" != "1" ]; then
         --means_lr 0.00012
         --antialiased
         --test_every "$TRAIN_TEST_EVERY"
-        --eval_use_covisible
-        --eval_covisible_dir "$COVI_DIR"
+        --eval_list "$EVAL_LIST_PATH"
     )
     echo "Executing training: ${TRAIN_CMD[*]}"
     "${TRAIN_CMD[@]}"
@@ -202,10 +301,12 @@ if [ "${SKIP_EVAL:-0}" != "1" ]; then
             --ckpt "$CKPT"
             --test_every "$EVAL_TEST_EVERY"
             --eval_use_covisible
+            --eval_dycheck_metrics
             --eval_covisible_dir "$COVI_DIR"
+            --eval_list "$EVAL_LIST_PATH"
         )
         if [ -f "$ALIGN_PATH" ]; then
-            EVAL_CMD+=(--dataset_transform_path "$ALIGN_PATH")
+            EVAL_CMD+=(--dataset-transform-path "$ALIGN_PATH")
         fi
         echo "Executing external eval: ${EVAL_CMD[*]}"
         "${EVAL_CMD[@]}"

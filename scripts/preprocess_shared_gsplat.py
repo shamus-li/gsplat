@@ -498,8 +498,8 @@ def compute_covisible_masks(
     output_base: Path,
     examples_root: Path,
     device: str,
-    chunk: int,
-    micro_chunk: Optional[int],
+    batch_size: int,
+    num_workers: int,
     train_test_every: int,
     eval_test_every: int,
     factor: int,
@@ -533,15 +533,15 @@ def compute_covisible_masks(
         "train",
         "--support_test_every",
         str(train_test_every),
-        "--chunk",
-        str(chunk),
+        "--batch_size",
+        str(batch_size),
+        "--num_workers",
+        str(num_workers),
         "--device",
         device,
         "--output_dir",
         str(train_out),
     ]
-    if micro_chunk is not None:
-        cmd.extend(["--micro_chunk", str(micro_chunk)])
     run(cmd)
 
     # External eval subsets
@@ -564,19 +564,19 @@ def compute_covisible_masks(
             str(eval_test_every),
             "--base_split",
             "val",
-            "--support_split",
-            "train",
-            "--support_test_every",
-            str(train_test_every),
-            "--chunk",
-            str(chunk),
-            "--device",
-            device,
-            "--output_dir",
-            str(eval_out),
-        ]
-        if micro_chunk is not None:
-            cmd.extend(["--micro_chunk", str(micro_chunk)])
+        "--support_split",
+        "train",
+        "--support_test_every",
+        str(train_test_every),
+        "--batch_size",
+        str(batch_size),
+        "--num_workers",
+        str(num_workers),
+        "--device",
+        device,
+        "--output_dir",
+        str(eval_out),
+    ]
         run(cmd)
 
 
@@ -702,8 +702,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Enable covisible mask precomputation after reconstruction.",
     )
     parser.add_argument("--covisible-device", type=str, default="cuda")
-    parser.add_argument("--covisible-chunk", type=int, default=32)
-    parser.add_argument("--covisible-micro-chunk", type=int, default=None)
+    parser.add_argument("--covisible-batch-size", type=int, default=32)
+    parser.add_argument("--covisible-num-workers", type=int, default=4)
     parser.add_argument("--covisible-factor", type=int, default=1)
     parser.add_argument(
         "--examples-root",
@@ -820,8 +820,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             output_base=covi_base,
             examples_root=args.examples_root.expanduser().resolve(),
             device=args.covisible_device,
-            chunk=args.covisible_chunk,
-            micro_chunk=args.covisible_micro_chunk,
+            batch_size=args.covisible_batch_size,
+            num_workers=args.covisible_num_workers,
             train_test_every=args.train_test_every,
             eval_test_every=args.eval_test_every,
             factor=args.covisible_factor,

@@ -87,48 +87,67 @@ def _select_indices(
     return filtered
 
 
-def _load_rgbs(paths: Sequence[str]) -> np.ndarray:
+def _load_rgb(path: str) -> np.ndarray:
     import imageio.v2 as imageio
 
-    imgs = [imageio.imread(p)[..., :3] for p in paths]
-    return np.stack(imgs, axis=0)
+    return imageio.imread(path)[..., :3]
 
 
-def _resize_and_pad_stack(
-    images: np.ndarray,
-    target_hw: Tuple[int, int],
+def _resize_and_pad_image(
+    image: np.ndarray,
+    target_hw: Optional[Tuple[int, int]],
 ) -> np.ndarray:
     """Resize with aspect preservation and symmetric padding to target H×W."""
+    if target_hw is None:
+        return image
+
     target_h, target_w = target_hw
-    if images.shape[1] == target_h and images.shape[2] == target_w:
-        return images
+    if image.shape[0] == target_h and image.shape[1] == target_w:
+        return image
 
     import cv2
 
-    resized_padded = []
-    for img in images:
-        h, w = img.shape[:2]
-        scale = min(target_h / h, target_w / w)
-        new_h = max(1, int(round(h * scale)))
-        new_w = max(1, int(round(w * scale)))
-        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    h, w = image.shape[:2]
+    scale = min(target_h / h, target_w / w)
+    new_h = max(1, int(round(h * scale)))
+    new_w = max(1, int(round(w * scale)))
+    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-        pad_top = (target_h - new_h) // 2
-        pad_bottom = target_h - new_h - pad_top
-        pad_left = (target_w - new_w) // 2
-        pad_right = target_w - new_w - pad_left
-        padded = cv2.copyMakeBorder(
-            resized,
-            pad_top,
-            pad_bottom,
-            pad_left,
-            pad_right,
-            borderType=cv2.BORDER_CONSTANT,
-            value=0,
-        )
-        resized_padded.append(padded)
+    pad_top = (target_h - new_h) // 2
+    pad_bottom = target_h - new_h - pad_top
+    pad_left = (target_w - new_w) // 2
+    pad_right = target_w - new_w - pad_left
+    return cv2.copyMakeBorder(
+        resized,
+        pad_top,
+        pad_bottom,
+        pad_left,
+        pad_right,
+        borderType=cv2.BORDER_CONSTANT,
+        value=0,
+    )
 
-    return np.stack(resized_padded, axis=0)
+
+def _maybe_downscale_image(
+    image: np.ndarray,
+    max_hw: Optional[int],
+) -> np.ndarray:
+    """Uniformly downscale so the longer side <= max_hw (if provided)."""
+    if max_hw is None or max_hw <= 0:
+        return image
+
+    h, w = image.shape[:2]
+    longer = max(h, w)
+    if longer <= max_hw:
+        return image
+
+    scale = max_hw / float(longer)
+    new_h = max(1, int(round(h * scale)))
+    new_w = max(1, int(round(w * scale)))
+
+    import cv2
+
+    return cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 
 def _empty_cache(device: torch.device) -> None:
@@ -136,6 +155,54 @@ def _empty_cache(device: torch.device) -> None:
         idx = device.index if device.index is not None else torch.cuda.current_device()
         with torch.cuda.device(idx):
             torch.cuda.empty_cache()
+
+
+class ColmapRAFTDenseDataset(torch.utils.data.Dataset):
+    """Lazy dataset that yields (base_img, support_img, base_idx, support_idx)."""
+
+    def __init__(
+        self,
+        base_paths: Sequence[str],
+        support_paths: Sequence[str],
+        target_hw: Optional[Tuple[int, int]],
+        max_hw: Optional[int],
+    ):
+        self.base_paths = list(base_paths)
+        self.support_paths = list(support_paths)
+        self.target_hw = target_hw
+        self.max_hw = max_hw
+        self.B = len(self.base_paths)
+        self.S = len(self.support_paths)
+
+    def __len__(self) -> int:
+        return self.B * self.S
+
+    def __getitem__(self, index: int):
+        bi, si = divmod(index, self.S)
+        base_img = _prepare_image(_load_rgb(self.base_paths[bi]), self.max_hw, self.target_hw)
+        support_img = _prepare_image(_load_rgb(self.support_paths[si]), self.max_hw, self.target_hw)
+        return base_img, support_img, bi, si
+
+
+def _prepare_image(
+    image: np.ndarray,
+    max_hw: Optional[int],
+    target_hw: Optional[Tuple[int, int]],
+) -> np.ndarray:
+    image = _maybe_downscale_image(image, max_hw)
+    return _resize_and_pad_image(image, target_hw)
+
+
+def _flow_to_warp(flow: np.ndarray) -> np.ndarray:
+    """Compute warp coordinates from optical flow."""
+    H, W = flow.shape[:2]
+    x, y = np.meshgrid(
+        np.arange(W, dtype=flow.dtype),
+        np.arange(H, dtype=flow.dtype),
+        indexing="xy",
+    )
+    grid = np.stack([x, y], axis=-1)
+    return grid + flow
 
 
 def compute_covisible_for_base(
@@ -147,21 +214,20 @@ def compute_covisible_for_base(
     factor: int,
     out_dir: Path,
     metadata_root: Path,
-    chunk: int = 64,
-    micro_chunk: Optional[int] = None,
+    batch_size: int = 32,
+    num_workers: int = 4,
     device: torch.device = torch.device("cuda"),
     num_min_frames: int = 5,
     min_frame_ratio: float = 0.1,
+    max_hw: Optional[int] = None,
 ) -> None:
-    # Ensure output dirs exist
     path_ops.mkdir(out_dir.as_posix())
     metadata_root.mkdir(parents=True, exist_ok=True)
 
-    # Collect image paths
     base_paths = [base_parser.image_paths[i] for i in base_indices]
     support_paths = [support_parser.image_paths[i] for i in support_indices]
 
-    if len(base_paths) == 0:
+    if not base_paths:
         raise ValueError(
             "[covisible] Resolved zero base images. "
             f"Dataset='{getattr(base_parser, 'data_dir', '?')}', "
@@ -169,7 +235,7 @@ def compute_covisible_for_base(
             f"test_every={getattr(base_parser, 'test_every', '?')}."
         )
 
-    if len(support_paths) == 0:
+    if not support_paths:
         raise ValueError(
             "[covisible] Resolved zero support images. "
             f"Dataset='{getattr(support_parser, 'data_dir', '?')}', "
@@ -177,10 +243,9 @@ def compute_covisible_for_base(
             f"test_every={getattr(support_parser, 'test_every', '?')}."
         )
 
-    # Load images as float32 [0,255] expected by RAFT utils
-    base_rgbs = _load_rgbs(base_paths)
-    support_rgbs = _load_rgbs(support_paths)
-    support_rgbs = _resize_and_pad_stack(support_rgbs, base_rgbs.shape[1:3])
+    # Determine target HW from the first support image.
+    support_preview = _maybe_downscale_image(_load_rgb(support_paths[0]), max_hw)
+    target_hw = support_preview.shape[:2]
 
     # Persist alignment information between base and support normalizations.
     base_transform = base_parser.transform.astype(np.float64)
@@ -195,158 +260,123 @@ def compute_covisible_for_base(
         base_split=np.array([base_parser.test_every], dtype=np.int32),
     )
 
-    # Prepare RAFT model
+    dataset = ColmapRAFTDenseDataset(
+        base_paths=base_paths,
+        support_paths=support_paths,
+        target_hw=target_hw,
+        max_hw=max_hw,
+    )
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+
     if device.type == "cuda":
         torch.cuda.set_device(device.index if device.index is not None else 0)
     model = get_raft().to(device).eval()
+    if torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel(model)
 
-    # For memory, process in chunks over support dimension
-    S = len(support_rgbs)
-    B = len(base_rgbs)
+    S = len(support_paths)
+    B = len(base_paths)
 
-    max_micro = max(1, micro_chunk if micro_chunk is not None else chunk)
-    adaptive_cap = max_micro
+    min_ratio_visible = max(1, int(np.ceil(min_frame_ratio * S)))
+    if S < num_min_frames:
+        visible_thresh = min(S, min_ratio_visible)
+    else:
+        visible_thresh = min(S, max(num_min_frames, min_ratio_visible))
+    if visible_thresh <= 0:
+        raise ValueError(
+            f"Computed non-positive visibility threshold ({visible_thresh})."
+            " Check num_min_frames/min_frame_ratio settings."
+        )
+    print(
+        f"[covisible] Support frames: {S}, keeping pixels visible in >= {visible_thresh} frames.",
+        flush=True,
+    )
 
-    # Iterate base images, compute occlusion against all support frames
-    for bi in tqdm(range(B), desc="Dumping covisible"):
-        cache: List[np.ndarray] = []  # occlusion masks for this base
-        img0 = base_rgbs[bi]
+    occ_cache: List[List[np.ndarray]] = [[] for _ in range(B)]
+    completed = 0
 
-        # Chunk over support images
-        for start in range(0, S, chunk):
-            end = min(start + chunk, S)
-            imgs1_chunk = support_rgbs[start:end]
+    import cv2
 
-            remaining = end - start
-            sub_offset = 0
-            current_cap = min(adaptive_cap, remaining)
+    with torch.inference_mode():
+        for batch in tqdm(dataloader, desc="Computing covisible"):
+            img0_batch, img1_batch, bi_batch, _ = batch
+            img0_t = (
+                img0_batch.permute(0, 3, 1, 2)
+                .contiguous()
+                .float()
+                .to(device, non_blocking=True)
+            )
+            img1_t = (
+                img1_batch.permute(0, 3, 1, 2)
+                .contiguous()
+                .float()
+                .to(device, non_blocking=True)
+            )
 
-            while sub_offset < remaining:
-                attempt = min(current_cap, remaining - sub_offset)
-                success = False
-                while not success:
-                    try:
-                        imgs1 = imgs1_chunk[sub_offset : sub_offset + attempt]
+            padder = InputPadder(img0_t.shape)
+            img0_t, img1_t = padder.pad(img0_t, img1_t)
 
-                        with torch.inference_mode():
-                            img0_b = np.repeat(img0[None], repeats=attempt, axis=0)
+            flow_fw = model(img0_t, img1_t, iters=20, test_mode=True)[1]
+            flow_bw = model(img1_t, img0_t, iters=20, test_mode=True)[1]
 
-                            img0_t = (
-                                torch.from_numpy(img0_b.astype(np.uint8))
-                                .permute(0, 3, 1, 2)
-                                .float()
-                                .to(device, non_blocking=True)
-                            )
-                            img1_t = (
-                                torch.from_numpy(imgs1.astype(np.uint8))
-                                .permute(0, 3, 1, 2)
-                                .float()
-                                .to(device, non_blocking=True)
-                            )
-                            padder = InputPadder(img0_t.shape)
-                            img0_t, img1_t = padder.pad(img0_t, img1_t)
+            flow_fw = (
+                padder.unpad(flow_fw).permute(0, 2, 3, 1).cpu().numpy()
+            )
+            flow_bw = (
+                padder.unpad(flow_bw).permute(0, 2, 3, 1).cpu().numpy()
+            )
 
-                            flow_fw = model(img0_t, img1_t, iters=20, test_mode=True)[
-                                1
-                            ]
-                            flow_bw = model(img1_t, img0_t, iters=20, test_mode=True)[
-                                1
-                            ]
-                            flow_fw = (
-                                padder.unpad(flow_fw)
-                                .permute(0, 2, 3, 1)
-                                .cpu()
-                                .numpy()
-                            )
-                            flow_bw = (
-                                padder.unpad(flow_bw)
-                                .permute(0, 2, 3, 1)
-                                .cpu()
-                                .numpy()
-                            )
+            bi_list = bi_batch.tolist()
+            for k in range(flow_fw.shape[0]):
+                fw = flow_fw[k]
+                bw = flow_bw[k]
+                warp = _flow_to_warp(fw)
+                bw_res = cv2.remap(
+                    bw, warp[..., 0], warp[..., 1], cv2.INTER_LINEAR
+                )
+                fb_sq_diff = np.sum((fw + bw_res) ** 2, axis=-1, keepdims=True)
+                fb_sum_sq = np.sum(fw**2 + bw_res**2, axis=-1, keepdims=True)
+                occ = (fb_sq_diff > 0.01 * fb_sum_sq + 0.5).astype(np.float32)
 
-                        occs: List[np.ndarray] = []
-                        import cv2
-
-                        def flow_to_warp(flow: np.ndarray) -> np.ndarray:
-                            H, W = flow.shape[:2]
-                            x, y = np.meshgrid(
-                                np.arange(W, dtype=flow.dtype),
-                                np.arange(H, dtype=flow.dtype),
-                                indexing="xy",
-                            )
-                            grid = np.stack([x, y], axis=-1)
-                            return grid + flow
-
-                        for k in range(flow_fw.shape[0]):
-                            fw = flow_fw[k]
-                            bw = flow_bw[k]
-                            warp = flow_to_warp(fw)
-                            bw_res = cv2.remap(
-                                bw, warp[..., 0], warp[..., 1], cv2.INTER_LINEAR
-                            )
-                            fb_sq_diff = np.sum(
-                                (fw + bw_res) ** 2, axis=-1, keepdims=True
-                            )
-                            fb_sum_sq = np.sum(
-                                fw**2 + bw_res**2, axis=-1, keepdims=True
-                            )
-                            occ = (fb_sq_diff > 0.01 * fb_sum_sq + 0.5).astype(
-                                np.float32
-                            )
-                            occs.append(occ)
-
-                        cache.extend(occs)
-                        success = True
-                        _empty_cache(device)
-                    except RuntimeError as e:
-                        err_lower = str(e).lower()
-                        oom_like = (
-                            "out of memory" in err_lower
-                            or "integer out of range" in err_lower
+                bi = int(bi_list[k])
+                occ_cache[bi].append(occ)
+                if len(occ_cache[bi]) == S:
+                    support_occs = np.stack(occ_cache[bi], axis=0)
+                    visible_counts = (1.0 - support_occs).sum(axis=0)
+                    covisible = (visible_counts >= visible_thresh).astype(np.float32)
+                    if not np.any(covisible):
+                        print(
+                            "[covisible] Empty mask for",
+                            base_parser.image_names[base_indices[bi]],
+                            "-> defaulting to full visibility",
+                            flush=True,
                         )
-                        cudnn_not_supported = (
-                            "cudnn_status_not_supported" in err_lower
-                            or "grid_sample" in err_lower
-                            or "grid_sampler" in err_lower
-                        )
-                        if (oom_like or cudnn_not_supported) and attempt > 1:
-                            new_attempt = max(1, attempt // 2)
-                            if new_attempt != attempt:
-                                reason = (
-                                    "CUDA OOM"
-                                    if oom_like
-                                    else "cuDNN error (likely fragmentation)"
-                                )
-                                print(
-                                    f"[covisible] {reason}; retrying with sub-batch size {new_attempt}",
-                                    flush=True,
-                                )
-                                adaptive_cap = min(adaptive_cap, new_attempt)
-                            attempt = new_attempt
-                            _empty_cache(device)
-                            continue
-                        raise
+                        covisible[:] = 1.0
 
-                sub_offset += attempt
-                current_cap = attempt
+                    rel_name = Path(base_parser.image_names[base_indices[bi]])
+                    out_path = out_dir / rel_name.with_suffix(".png")
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    import imageio.v2 as imageio
 
-        support_occs = np.array(cache, dtype=np.float32)  # [S, H, W, 1]
-        # Determine pixels occluded by most supports; keep pixels visible in
-        # at least T frames, same threshold rule as dycheck
-        thresh = max(num_min_frames, int(min_frame_ratio * S))
-        covisible = 1.0 - (
-            (1.0 - support_occs).sum(axis=0) <= thresh
-        ).astype(np.float32)
+                    mask = (covisible[..., 0] * 255).astype(np.uint8)
+                    imageio.imwrite(out_path.as_posix(), mask)
 
-        # Save mask PNG aligned with base parser image name
-        rel_name = Path(base_parser.image_names[base_indices[bi]])
-        out_path = out_dir / rel_name.with_suffix(".png")
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        import imageio.v2 as imageio
+                    occ_cache[bi] = []
+                    completed += 1
 
-        mask = (covisible[..., 0] * 255).astype(np.uint8)
-        imageio.imwrite(out_path.as_posix(), mask)
+            _empty_cache(device)
+
+    if completed != B:
+        missing = [base_parser.image_names[base_indices[i]] for i in range(B) if occ_cache[i]]
+        raise RuntimeError(
+            f"[covisible] Did not finish all base images. Pending masks for: {missing}"
+        )
 
 
 def main():
@@ -365,12 +395,6 @@ def main():
         help="Optional cadence for support split; defaults to --test_every.",
     )
     ap.add_argument(
-        "--micro_chunk",
-        type=int,
-        default=None,
-        help="Maximum number of support frames processed per RAFT call (defaults to --chunk).",
-    )
-    ap.add_argument(
         "--device",
         type=str,
         default="cuda",
@@ -382,22 +406,39 @@ def main():
         default=None,
         help="Directory to write covisible masks and alignment metadata (defaults to <base_dir>/covisible).",
     )
-    ap.add_argument("--chunk", type=int, default=64)
-    ap.add_argument("--num_min_frames", type=int, default=5)
-    ap.add_argument("--min_frame_ratio", type=float, default=0.1)
+    ap.add_argument(
+        "--batch_size",
+        type=int,
+        default=4,
+        help="Batch size (number of image pairs) processed per RAFT step.",
+    )
+    ap.add_argument(
+        "--num_workers",
+        type=int,
+        default=4,
+        help="Number of DataLoader workers for streaming image IO.",
+    )
+    ap.add_argument("--num_min_frames", type=int, default=3)
+    ap.add_argument("--min_frame_ratio", type=float, default=0.05)
+    ap.add_argument(
+        "--max_hw",
+        type=int,
+        default=640,
+        help="Clamp images so the longer side is at most this many pixels before RAFT (0 disables).",
+    )
     args = ap.parse_args()
 
     base_dir = Path(args.base_dir).resolve()
     support_dir = Path(args.support_dir).resolve() if args.support_dir else base_dir
 
-    # Build parsers (normalize False; we only need images)
+    # Build parsers with normalization so we can persist alignment metadata.
     base_parser = ColmapParser(
-        data_dir=str(base_dir), factor=args.factor, normalize=False, test_every=args.test_every
+        data_dir=str(base_dir), factor=args.factor, normalize=True, test_every=args.test_every
     )
     # Support cadence defaults to the base cadence unless explicitly overridden.
     support_test_every = args.support_test_every or args.test_every
     support_parser = ColmapParser(
-        data_dir=str(support_dir), factor=args.factor, normalize=False, test_every=support_test_every
+        data_dir=str(support_dir), factor=args.factor, normalize=True, test_every=support_test_every
     )
 
     device = torch.device(args.device)
@@ -442,11 +483,12 @@ def main():
         factor=args.factor,
         out_dir=out_dir,
         metadata_root=output_root,
-        chunk=args.chunk,
-        micro_chunk=args.micro_chunk,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
         device=device,
         num_min_frames=args.num_min_frames,
         min_frame_ratio=args.min_frame_ratio,
+        max_hw=args.max_hw,
     )
 
 

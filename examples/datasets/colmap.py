@@ -12,8 +12,12 @@ from pycolmap import SceneManager
 from tqdm import tqdm
 from typing_extensions import assert_never
 
-from .normalize import (align_principal_axes, similarity_from_cameras,
-                        transform_cameras, transform_points)
+from .normalize import (
+    align_principal_axes,
+    similarity_from_cameras,
+    transform_cameras,
+    transform_points,
+)
 
 
 def _get_rel_paths(path_dir: str) -> List[str]:
@@ -223,22 +227,6 @@ class Parser:
 
             transform = T2 @ T1
 
-            # Fix for up side down. We assume more points towards
-            # the bottom of the scene which is true when ground floor is
-            # present in the images.
-            if np.median(points[:, 2]) > np.mean(points[:, 2]):
-                # rotate 180 degrees around x axis such that z is flipped
-                T3 = np.array(
-                    [
-                        [1.0, 0.0, 0.0, 0.0],
-                        [0.0, -1.0, 0.0, 0.0],
-                        [0.0, 0.0, -1.0, 0.0],
-                        [0.0, 0.0, 0.0, 1.0],
-                    ]
-                )
-                camtoworlds = transform_cameras(T3, camtoworlds)
-                points = transform_points(T3, points)
-                transform = T3 @ transform
         else:
             transform = np.eye(4)
 
@@ -393,26 +381,31 @@ class Dataset:
                 )
             return filtered
 
-        if split == "train":
-            train_indices = indices[indices % self.parser.test_every != 0]
-            self.indices = _filter_indices_by_match_string(
-                train_indices, split_label="training"
-            )
-            if allowed_image_names is not None:
-                self.indices = [
-                    i
-                    for i in self.indices
-                    if self.parser.image_names[i] in allowed_image_names
-                ]
-                if not self.indices:
-                    raise ValueError(
-                        "No training images left after applying selected_images."
-                    )
+        if self.parser.test_every <= 1:
+            train_indices = indices
+            val_indices = indices
         else:
+            train_indices = indices[indices % self.parser.test_every != 0]
             val_indices = indices[indices % self.parser.test_every == 0]
-            self.indices = _filter_indices_by_match_string(
-                val_indices, split_label="evaluation"
-            )
+
+        if split == "train":
+            split_label = "training"
+            base_indices = train_indices
+        else:
+            split_label = "evaluation"
+            base_indices = val_indices
+
+        self.indices = _filter_indices_by_match_string(
+            base_indices, split_label=split_label
+        )
+        if allowed_image_names is not None:
+            self.indices = [
+                i for i in self.indices if self.parser.image_names[i] in allowed_image_names
+            ]
+            if not self.indices:
+                raise ValueError(
+                    f"No {split_label} images left after applying selected_images."
+                )
 
     def __len__(self):
         return len(self.indices)

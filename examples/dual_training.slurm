@@ -2,25 +2,29 @@
 #SBATCH --job-name=gsplat_dual
 #SBATCH --output=slurm_logs/%A_%a.out
 #SBATCH --error=slurm_logs/%A_%a.err
-#SBATCH --partition=monakhova
-#SBATCH --exclude=lil-compute-05,unicorn-compute-01,bhattacharjee-compute-02
+#SBATCH --partition=default_partition
+#SBATCH --exclude=lil-compute-05,unicorn-compute-01,bhattacharjee-compute-02,awang-compute-01,kim-compute-03,kim-compute-04,kim-compute-05
 #SBATCH --gres=gpu:1
 #SBATCH --constraint="gpu-high"
 #SBATCH -N 1
 #SBATCH -n 2
-#SBATCH -t 12:00:00
+#SBATCH -t 24:00:00
 #SBATCH --mem 32gb
-#SBATCH --array=0-1
+#SBATCH --requeue
 
 # Dual training + optional external-eval SLURM job array
-# Array task 0: Full training (all images)
-# Array task 1: Filtered training (optional match_string)
+# Variant selection options:
+#   - Set the environment variable TRAIN_VARIANT to "combined" or "filtered"
+#   - Or pass a 4th positional argument with the same values
+# If omitted, the script errors out (legacy array behaviour has been removed to
+# ensure each variant runs in its own job).
 #
-# Usage: sbatch examples/dual_training.slurm DATA_DIR [MATCH_STRING] [EVAL_DIR]
+# Usage: sbatch examples/dual_training.slurm DATA_DIR [MATCH_STRING] [EVAL_DIR] [VARIANT]
 #   - DATA_DIR:       Path to COLMAP dataset root (expects 'images/' and 'sparse/')
 #   - MATCH_STRING:   Optional token to filter training images (regex-safe word match)
 #   - EVAL_DIR:       Optional path to an existing COLMAP dataset directory for external eval
 #                     (expects 'images/' and 'sparse/'). No preprocessing is performed.
+#   - VARIANT:        Optional literal "combined" or "filtered"; same as TRAIN_VARIANT env var.
 #
 # The result base is inferred from the basename of DATA_DIR and written to
 # results/<basename>/{combined,filtered}. Set RESULT_ROOT to override the
@@ -37,6 +41,7 @@ DATA_DIR=$1
 MATCH_STRING=${2:-""}
 # Optional separate COLMAP dataset directory to evaluate on
 EVAL_DIR=${3:-""}
+VARIANT_ARG=${4:-""}
 
 # Normalize dataset arguments
 DATA_DIR=${DATA_DIR%/}
@@ -54,7 +59,7 @@ fi
 # Check required arguments
 if [ -z "$DATA_DIR" ]; then
     echo "ERROR: Missing required arguments"
-    echo "Usage: sbatch examples/dual_training.slurm DATA_DIR [MATCH_STRING] [EVAL_DIR]"
+    echo "Usage: sbatch examples/dual_training.slurm DATA_DIR [MATCH_STRING] [EVAL_DIR] [VARIANT]"
     exit 1
 fi
 
@@ -65,34 +70,67 @@ fi
 
 RESULT_ROOT=${RESULT_ROOT:-results}
 DATA_NAME=$(basename "$DATA_DIR")
+
+# When the dataset path ends with a generic split name like "train",
+# also include the two parent directory names so result paths stay unique
+# (e.g., action-figure/iphone instead of just train).
+if [ "$DATA_NAME" = "train" ]; then
+    parent_dir=$(dirname "$DATA_DIR")
+    parent_name=$(basename "$parent_dir")
+    grandparent_dir=$(dirname "$parent_dir")
+    grandparent_name=$(basename "$grandparent_dir")
+
+    if [ -n "$parent_name" ] && [ "$parent_name" != "." ] && [ "$parent_name" != "/" ]; then
+        if [ -n "$grandparent_name" ] && [ "$grandparent_name" != "." ] && [ "$grandparent_name" != "/" ]; then
+            DATA_NAME="$grandparent_name/$parent_name"
+        else
+            DATA_NAME="$parent_name"
+        fi
+    fi
+fi
+
 RESULT_BASE="$RESULT_ROOT/$DATA_NAME"
 COMBINED_RESULT_DIR="$RESULT_BASE/combined"
 FILTERED_RESULT_DIR="$RESULT_BASE/filtered"
 
 mkdir -p "$COMBINED_RESULT_DIR" "$FILTERED_RESULT_DIR"
 
-# Set result directory and match string based on array task ID
-if [ "$SLURM_ARRAY_TASK_ID" -eq 0 ]; then
-    RESULT_DIR="$COMBINED_RESULT_DIR"
-    JOB_DATA_DIR="$DATA_DIR"
-    MATCH_STR=""
-    RUN_TYPE="Full (combined)"
-else
-    RESULT_DIR="$FILTERED_RESULT_DIR"
-    JOB_DATA_DIR="$DATA_DIR"
-    MATCH_STR="$MATCH_STRING"
-    if [ -n "$MATCH_STR" ]; then
-        RUN_TYPE="Filtered (match '$MATCH_STR')"
-    else
-        RUN_TYPE="Filtered (no match string)"
-    fi
+TRAIN_VARIANT="${VARIANT_ARG:-${TRAIN_VARIANT:-}}"
+if [ -z "$TRAIN_VARIANT" ]; then
+    echo "ERROR: Specify TRAIN_VARIANT=combined|filtered (env) or pass as 4th argument."
+    exit 1
 fi
+
+case "$TRAIN_VARIANT" in
+    combined)
+        RESULT_DIR="$COMBINED_RESULT_DIR"
+        JOB_DATA_DIR="$DATA_DIR"
+        MATCH_STR=""
+        RUN_TYPE="Full (combined)"
+        ;;
+    filtered)
+        RESULT_DIR="$FILTERED_RESULT_DIR"
+        JOB_DATA_DIR="$DATA_DIR"
+        MATCH_STR="$MATCH_STRING"
+        if [ -n "$MATCH_STR" ]; then
+            RUN_TYPE="Filtered (match '$MATCH_STR')"
+        else
+            RUN_TYPE="Filtered (no match string)"
+        fi
+        ;;
+    *)
+        echo "ERROR: TRAIN_VARIANT must be 'combined' or 'filtered', got '$TRAIN_VARIANT'"
+        exit 1
+        ;;
+esac
 
 echo "=========================================="
 echo "GSPLAT DUAL TRAINING - ARRAY JOB"
 echo "=========================================="
 echo "Job ID: $SLURM_ARRAY_JOB_ID"
-echo "Array Task ID: $SLURM_ARRAY_TASK_ID"
+if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
+    echo "Array Task ID: $SLURM_ARRAY_TASK_ID"
+fi
 echo "Run type: $RUN_TYPE"
 echo "Node: $SLURMD_NODENAME"
 echo "GPU: $CUDA_VISIBLE_DEVICES"
@@ -121,8 +159,10 @@ echo ""
 TRAIN_TEST_EVERY=${TRAIN_TEST_EVERY:-8}
 EVAL_TEST_EVERY=${EVAL_TEST_EVERY:-1}
 USE_COVISIBLE_EXTERNAL=${USE_COVISIBLE_EXTERNAL:-1}
-COVI_MICRO_CHUNK=${COVI_MICRO_CHUNK:-8}
+COVI_BATCH_SIZE=${COVI_BATCH_SIZE:-2}
+COVI_NUM_WORKERS=${COVI_NUM_WORKERS:-${COVI_MICRO_CHUNK:-2}}
 COVI_DEVICE=${COVI_DEVICE:-cuda}
+COVI_MAX_HW=${COVI_MAX_HW:-640}
 EVAL_ALIGN_PATH=${EVAL_ALIGN_PATH:-}
 ALIGN_ROOT=${ALIGN_ROOT:-$RESULT_DIR/alignments}
 
@@ -164,20 +204,6 @@ echo ""
 
 # Run the training
 eval "$CMD"
-
-# Link any precomputed covisible masks from the dataset into this run.
-if [ -d "$DATA_DIR/covisible" ]; then
-    echo "Linking precomputed covisible caches from $DATA_DIR/covisible"
-    mkdir -p "$RESULT_DIR/covisible"
-    for subset_path in "$DATA_DIR"/covisible/*; do
-        [ -d "$subset_path" ] || continue
-        subset_name=$(basename "$subset_path")
-        dest="$RESULT_DIR/covisible/$subset_name"
-        if [ ! -e "$dest" ]; then
-            ln -s "$(realpath "$subset_path")" "$dest"
-        fi
-    done
-fi
 
 # If an eval dataset directory is provided, run eval-only using the latest
 # checkpoint produced by this run. Results go to: $RESULT_DIR/eval_on_<eval_dir_basename>
@@ -244,18 +270,20 @@ PY
                 COVI_MASK_DIR="$COVI_OUTPUT_ROOT/1x/val"
                 if [ ! -d "$COVI_MASK_DIR" ]; then
                     echo "Precomputing covisible masks for external eval dataset..."
+                    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
                     python examples/preprocess_covisible_colmap.py \
                         --base_dir "$EVAL_DATA_DIR" \
                         --support_dir "$JOB_DATA_DIR" \
                         --factor 1 \
                         --test_every 1 \
                         --support_test_every "$TRAIN_TEST_EVERY" \
-                        --micro_chunk "$COVI_MICRO_CHUNK" \
+                        --batch_size "$COVI_BATCH_SIZE" \
+                        --num_workers "$COVI_NUM_WORKERS" \
                         --device "$COVI_DEVICE" \
+                        --max_hw "$COVI_MAX_HW" \
                         --output_dir "$COVI_OUTPUT_ROOT" \
                         --base_split val \
-                        --support_split train \
-                        --chunk 32
+                        --support_split train
                 else
                     echo "Covisible masks exist at $COVI_MASK_DIR; skipping generation."
                 fi
@@ -275,10 +303,10 @@ PY
                 --test_every 1"
             if [ -n "$EVAL_ALIGN_PATH" ] && [ -f "$EVAL_ALIGN_PATH" ]; then
                 echo "Using dataset transform: $EVAL_ALIGN_PATH"
-                EVAL_CMD="$EVAL_CMD --dataset_transform_path \"$EVAL_ALIGN_PATH\""
+                EVAL_CMD="$EVAL_CMD --dataset-transform-path \"$EVAL_ALIGN_PATH\""
             fi
             if [ "$USE_COVISIBLE_EXTERNAL" = "1" ]; then
-                EVAL_CMD="$EVAL_CMD --eval_use_covisible --eval_covisible_dir \"$COVI_OUTPUT_ROOT/1x\""
+                EVAL_CMD="$EVAL_CMD --eval_use_covisible --eval_dycheck_metrics --eval_covisible_dir \"$COVI_OUTPUT_ROOT/1x\""
             fi
             echo "Executing external eval: $EVAL_CMD"
             eval "$EVAL_CMD"
@@ -290,5 +318,5 @@ fi
 
 echo ""
 echo "=========================================="
-echo "ARRAY TASK $SLURM_ARRAY_TASK_ID COMPLETE"
+echo "VARIANT '$TRAIN_VARIANT' COMPLETE"
 echo "=========================================="

@@ -67,8 +67,7 @@ def _collect_eval_frames(eval_images: Path) -> List[Path]:
     frames = sorted(p for p in eval_images.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
     if not frames:
         raise FileNotFoundError(f"No evaluation frames found under {eval_images}")
-    idxs = sorted({0, max(0, len(frames) // 2), len(frames) - 1})
-    return [frames[i] for i in idxs]
+    return frames
 
 
 def _relative_symlink(src: Path, dst: Path) -> None:

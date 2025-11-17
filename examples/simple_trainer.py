@@ -5,7 +5,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import imageio.v3 as iio
 import numpy as np
@@ -28,10 +28,88 @@ from nerfview import CameraState, RenderTabState, apply_float_colormap
 from torch import Tensor
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
-from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
-from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from typing_extensions import Literal, assert_never
 from utils import AppearanceOptModule, CameraOptModule, knn, rgb_to_sh, set_random_seed
+
+
+def _alignment_dirs_to_probe(
+    result_dir: Path, data_dir: Path, ckpt_paths: Optional[Iterable[str]]
+) -> List[Path]:
+    """Return candidate alignment directories to inspect for transforms."""
+
+    dirs: List[Path] = []
+    run_dirs: List[Path] = []
+    seen: Set[Path] = set()
+
+    def maybe_add(path: Path) -> None:
+        if path in seen:
+            return
+        seen.add(path)
+        if path.is_dir():
+            dirs.append(path)
+
+    if result_dir:
+        ancestors: Iterable[Path] = [result_dir] + list(result_dir.parents)
+        for ancestor in ancestors:
+            maybe_add(ancestor / "alignments")
+            if ancestor.name == "results":
+                break
+    data_align_dir = data_dir.parent / "alignments"
+    maybe_add(data_align_dir)
+    covisible_candidates = [data_dir]
+    covisible_candidates.extend(data_dir.parents)
+    subset_token = data_dir.name
+    for ancestor in covisible_candidates:
+        covi_root = ancestor / "covisible"
+        maybe_add(covi_root)
+        maybe_add(covi_root / subset_token)
+
+    if ckpt_paths:
+        for ckpt in ckpt_paths:
+            ckpt_path = Path(ckpt).expanduser()
+            run_root = ckpt_path.parent.parent if ckpt_path.parent.name == "ckpts" else ckpt_path.parent
+            path = run_root / "alignments"
+            if path not in run_dirs and path.is_dir():
+                run_dirs.append(path)
+                seen.add(path)
+    return run_dirs + dirs
+
+
+def _pick_alignment_file(align_dir: Path, subset_token: str) -> Optional[Path]:
+    train_norm = align_dir / "train_normalization.npz"
+    if train_norm.is_file():
+        return train_norm
+
+    patterns = (
+        f"{subset_token}_to_*.npz",
+        f"*_{subset_token}.npz",
+        f"{subset_token}.npz",
+    )
+    for pattern in patterns:
+        matches = sorted(align_dir.glob(pattern))
+        if matches:
+            return matches[0]
+    matches = sorted(align_dir.glob("*.npz"))
+    return matches[0] if matches else None
+
+
+def _resolve_alignment_path(cfg: "Config") -> Optional[Path]:
+    """Infer the dataset alignment transform when one isn't explicitly provided."""
+
+    if cfg.dataset_transform_path:
+        return Path(cfg.dataset_transform_path).expanduser()
+
+    result_dir = Path(cfg.result_dir).expanduser()
+    data_dir = Path(cfg.data_dir).expanduser()
+    subset_token = data_dir.name
+
+    for align_dir in _alignment_dirs_to_probe(result_dir, data_dir, cfg.ckpt):
+        candidate = _pick_alignment_file(align_dir, subset_token)
+        if candidate is not None:
+            cfg.dataset_transform_path = candidate.as_posix()
+            return candidate
+    return None
+
 
 from gsplat import export_splats
 from gsplat.compression import PngCompression
@@ -39,6 +117,7 @@ from gsplat.distributed import cli
 from gsplat.optimizers import SelectiveAdam
 from gsplat.rendering import rasterization
 from gsplat.strategy import DefaultStrategy, MCMCStrategy
+from gsplat.metrics import dycheck as dy_metrics
 
 
 @dataclass
@@ -130,12 +209,21 @@ class Config:
     eval_match_string: Optional[str] = None
     # Optional path to newline-separated list of training image names
     train_list: Optional[str] = None
+    # Optional path to newline-separated list limiting evaluation images
+    eval_list: Optional[str] = None
+
+    # Visualization: when saving eval renders to disk, concatenate GT next to
+    # predictions (True) or save predictions only (False). External eval scripts
+    # set this to False to avoid GT compositing in saved PNGs.
+    vis_concat_gt: bool = True
 
     # Use covisible masks (if available) for evaluation metrics
     eval_use_covisible: bool = False
     # Optional explicit path to covisible masks root. If not set and
     # eval_use_covisible is True, defaults to f"{data_dir}/covisible/{data_factor}x"
     eval_covisible_dir: Optional[str] = None
+    # Enable DyCheck masked metrics (auto-enabled when eval_use_covisible=True)
+    eval_dycheck_metrics: bool = False
     # Optional path to a 4x4 transform (npy/npz) aligning this dataset to a
     # pretrained run's coordinate frame.
     dataset_transform_path: Optional[str] = None
@@ -350,6 +438,24 @@ class Runner:
                     f"Training list file '{train_list_path}' does not contain any image names."
                 )
 
+        eval_image_names: Optional[Set[str]] = None
+        eval_list_path: Optional[Path] = None
+        if cfg.eval_list:
+            eval_list_path = Path(cfg.eval_list).expanduser()
+            if not eval_list_path.is_file():
+                raise FileNotFoundError(
+                    f"Evaluation list file '{eval_list_path}' does not exist."
+                )
+            eval_list_path = eval_list_path.resolve()
+            with open(eval_list_path, "r", encoding="utf-8") as handle:
+                eval_image_names = {
+                    line.strip() for line in handle.readlines() if line.strip()
+                }
+            if not eval_image_names:
+                raise ValueError(
+                    f"Evaluation list file '{eval_list_path}' does not contain any image names."
+                )
+
         # Where to dump results.
         os.makedirs(cfg.result_dir, exist_ok=True)
 
@@ -366,24 +472,37 @@ class Runner:
         # Determine covisible directory for evaluation masks if requested
         self.covisible_root: Optional[Path] = None
         self._warned_missing_covisible = False
+        self._warned_stage_fallback = False
+        self._auto_alignment_path: Optional[Path] = None
         if cfg.eval_use_covisible:
             root = (
                 Path(cfg.eval_covisible_dir).expanduser()
                 if cfg.eval_covisible_dir
                 else Path(cfg.data_dir) / "covisible" / f"{cfg.data_factor}x"
             )
-            self.covisible_root = root
+            if root.exists():
+                self.covisible_root = root
+            else:
+                print(f"[Warning] Covisible root not found: {root}")
+            cfg.eval_dycheck_metrics = True
+
+        original_alignment = cfg.dataset_transform_path
+        resolved_alignment = _resolve_alignment_path(cfg)
+        if resolved_alignment is not None and original_alignment is None:
+            self._auto_alignment_path = resolved_alignment
+            print(f"[Info] Applying dataset alignment from: {resolved_alignment}")
 
         # Tensorboard
         self.writer = SummaryWriter(log_dir=f"{cfg.result_dir}/tb")
 
         # Load data: Training data should contain initial points and colors.
-        self.parser = Parser(
-            data_dir=cfg.data_dir,
-            factor=cfg.data_factor,
-            normalize=cfg.normalize_world_space,
-            test_every=cfg.test_every,
-        )
+        # If dataset_transform_path contains base_transform (train's normalization),
+        # we should use that instead of normalizing independently to ensure consistency.
+        use_train_normalization = False
+        train_normalization_transform = None
+        support_transform = None
+        align_transform = None
+
         if cfg.dataset_transform_path is not None:
             transform_path = Path(cfg.dataset_transform_path).expanduser()
             if not transform_path.exists():
@@ -392,24 +511,67 @@ class Runner:
                 )
             loaded = np.load(transform_path)
             if isinstance(loaded, np.ndarray):
-                align_transform = loaded
-            elif isinstance(loaded, np.lib.npyio.NpzFile) and "align_transform" in loaded:
-                align_transform = loaded["align_transform"]
+                align_transform = np.asarray(loaded, dtype=np.float32)
+            elif isinstance(loaded, np.lib.npyio.NpzFile):
+                if "base_transform" in loaded:
+                    train_normalization_transform = np.asarray(
+                        loaded["base_transform"], dtype=np.float32
+                    )
+                if "support_transform" in loaded:
+                    support_transform = np.asarray(
+                        loaded["support_transform"], dtype=np.float32
+                    )
+                if "align_transform" in loaded:
+                    align_transform = np.asarray(
+                        loaded["align_transform"], dtype=np.float32
+                    )
                 loaded.close()
             else:
                 raise KeyError(
                     f"Dataset transform '{transform_path}' does not contain 'align_transform'."
                 )
-            align_transform = np.asarray(align_transform, dtype=np.float32)
+        prefer_train_normalization = align_transform is None and train_normalization_transform is not None
+        use_train_normalization = prefer_train_normalization
+
+        self.parser = Parser(
+            data_dir=cfg.data_dir,
+            factor=cfg.data_factor,
+            normalize=cfg.normalize_world_space and not prefer_train_normalization,
+            test_every=cfg.test_every,
+        )
+        
+        if use_train_normalization and train_normalization_transform is not None:
+            # Apply train's normalization transform to raw poses so eval shares the same frame.
+            self.parser.camtoworlds = transform_cameras(
+                train_normalization_transform, self.parser.camtoworlds
+            )
+            self.parser.points = transform_points(
+                train_normalization_transform, self.parser.points
+            )
+            self.parser.transform = train_normalization_transform.copy()
+            print(f"[Info] Applied train's normalization from: {transform_path}")
+        if align_transform is not None:
+            if support_transform is not None:
+                diff = np.max(
+                    np.abs(self.parser.transform.astype(np.float32) - support_transform)
+                )
+                if diff > 1e-3:
+                    print(
+                        "[Warning] Parser normalization does not match support_transform; "
+                        "alignment accuracy may suffer."
+                    )
             self.parser.camtoworlds = transform_cameras(
                 align_transform, self.parser.camtoworlds
             )
             self.parser.points = transform_points(align_transform, self.parser.points)
             self.parser.transform = align_transform @ self.parser.transform
-            camera_locations = self.parser.camtoworlds[:, :3, 3]
-            scene_center = np.mean(camera_locations, axis=0)
-            dists = np.linalg.norm(camera_locations - scene_center, axis=1)
-            self.parser.scene_scale = np.max(dists)
+            print(f"[Info] Applied dataset alignment from: {transform_path}")
+        
+        # Compute scene scale after all transforms are applied
+        camera_locations = self.parser.camtoworlds[:, :3, 3]
+        scene_center = np.mean(camera_locations, axis=0)
+        dists = np.linalg.norm(camera_locations - scene_center, axis=1)
+        self.parser.scene_scale = np.max(dists)
         if train_image_names is not None:
             parser_image_names = set(self.parser.image_names)
             missing_images = sorted(train_image_names - parser_image_names)
@@ -421,6 +583,17 @@ class Runner:
             print(
                 f"Training image subset: {len(train_image_names)} images from {train_list_path}"
             )
+        if eval_image_names is not None:
+            parser_image_names = set(self.parser.image_names)
+            missing_eval = sorted(eval_image_names - parser_image_names)
+            if missing_eval:
+                raise ValueError(
+                    "Evaluation list contains images that are not part of the parsed dataset. "
+                    f"First missing entry: '{missing_eval[0]}'."
+                )
+            print(
+                f"Evaluation image subset: {len(eval_image_names)} images from {eval_list_path}"
+            )
         self.trainset = Dataset(
             self.parser,
             split="train",
@@ -430,14 +603,18 @@ class Runner:
             selected_images=train_image_names,
         )
         print("Training set size:", len(self.trainset))
-        val_match_string = cfg.eval_match_string or cfg.match_string
+        val_match_string = cfg.eval_match_string
         self.valset = Dataset(
             self.parser,
             split="val",
             match_string=val_match_string,
+            selected_images=eval_image_names,
         )
         self.scene_scale = self.parser.scene_scale * 1.1 * cfg.global_scale
         print("Scene scale:", self.scene_scale)
+
+        if cfg.ckpt is None and self.world_rank == 0:
+            self._persist_train_normalization()
 
         # Model
         feature_dim = 32 if cfg.app_opt else None
@@ -545,21 +722,9 @@ class Runner:
                 ),
             ]
 
-        # Losses & Metrics.
-        self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
-        self.psnr = PeakSignalNoiseRatio(data_range=1.0).to(self.device)
-
-        if cfg.lpips_net == "alex":
-            self.lpips = LearnedPerceptualImagePatchSimilarity(
-                net_type="alex", normalize=True
-            ).to(self.device)
-        elif cfg.lpips_net == "vgg":
-            # The 3DGS official repo uses lpips vgg, which is equivalent with the following:
-            self.lpips = LearnedPerceptualImagePatchSimilarity(
-                net_type="vgg", normalize=False
-            ).to(self.device)
-        else:
+        if cfg.lpips_net not in ("alex", "vgg"):
             raise ValueError(f"Unknown LPIPS network: {cfg.lpips_net}")
+        self.lpips_net = cfg.lpips_net
 
         # Viewer
         if not self.cfg.disable_viewer:
@@ -570,6 +735,52 @@ class Runner:
                 output_dir=Path(cfg.result_dir),
                 mode="training",
             )
+
+    def _resolve_covisible_stage_dir(self, stage: str) -> Optional[Path]:
+        """Return the covisible mask directory for a given eval stage if it exists."""
+
+        if self.covisible_root is None:
+            return None
+
+        base = self.covisible_root
+        candidates: List[Path] = []
+
+        if base.name == stage and base.exists():
+            candidates.append(base)
+
+        candidates.append(base / stage)
+
+        scale_token = f"{self.cfg.data_factor}x"
+        candidates.append(base / scale_token / stage)
+        candidates.append(base / "1x" / stage)
+
+        try:
+            for child in base.iterdir():
+                if child.is_dir() and child.name.endswith("x"):
+                    candidates.append(child / stage)
+        except OSError:
+            pass
+
+        seen: Set[str] = set()
+        for cand in candidates:
+            key = cand.as_posix()
+            if key in seen:
+                continue
+            seen.add(key)
+            if cand.exists():
+                return cand
+        return None
+
+    def _persist_train_normalization(self) -> None:
+        align_dir = Path(self.cfg.result_dir).expanduser() / "alignments"
+        align_dir.mkdir(parents=True, exist_ok=True)
+        out_path = align_dir / "train_normalization.npz"
+        payload = {
+            "base_transform": self.parser.transform.astype(np.float32),
+            "align_transform": np.eye(4, dtype=np.float32),
+        }
+        np.savez(out_path, **payload)
+        print(f"[Info] Saved train normalization to {out_path}")
 
     def rasterize_splats(
         self,
@@ -1035,44 +1246,68 @@ class Runner:
                 colors = colors + (1.0 - alphas)
 
             colors = torch.clamp(colors, 0.0, 1.0)
-            # Optionally apply covisible mask for evaluation metrics (and previews)
-            if self.covisible_root is not None:
+            colors_for_vis = colors
+
+            pixels_p = pixels.permute(0, 3, 1, 2)  # [1, 3, H, W]
+            colors_p = colors.permute(0, 3, 1, 2)
+
+            metrics["psnr"].append(dy_metrics.psnr(colors_p, pixels_p))
+            metrics["ssim"].append(dy_metrics.ssim(colors_p, pixels_p))
+            metrics["lpips"].append(dy_metrics.lpips(colors_p, pixels_p, net=cfg.lpips_net))
+
+            if self.covisible_root is not None and cfg.eval_dycheck_metrics:
                 try:
-                    # Map dataset index to original image name
-                    # Note: DataLoader yields in-order items for shuffle=False
                     dataset_index = self.valset.indices[i]
                     image_name = self.parser.image_names[dataset_index]
-                    # Covisible mask path mirrors the image name with .png suffix under split dir
-                    covisible_dir = self.covisible_root / stage
-                    mask_path = covisible_dir / (Path(image_name).with_suffix(".png"))
-                    # If nested directories exist in image name, ensure we can read
-                    mask_np = iio.imread(mask_path.as_posix())
-                    if mask_np.ndim == 3:
-                        mask_np = mask_np[..., 0]
-                    mask_t = torch.from_numpy((mask_np > 127).astype(np.float32)).to(
-                        device
-                    )
-                    if mask_t.shape[0] != height or mask_t.shape[1] != width:
-                        # Resize nearest to match image size
-                        mask_t = torch.nn.functional.interpolate(
-                            mask_t[None, None, ...],
-                            size=(height, width),
-                            mode="nearest",
-                        )[0, 0]
-                    mask_t = mask_t[..., None]  # [H, W, 1]
-                    # Broadcast to [1, H, W, 1]
-                    mask_t = mask_t[None, ...]
-                    # Apply masked comparison: outside mask, set pred=gt
-                    colors = colors * mask_t + pixels * (1.0 - mask_t)
+                    stage_dir = self._resolve_covisible_stage_dir(stage)
+                    if stage_dir is None and stage != "val":
+                        fallback_dir = self._resolve_covisible_stage_dir("val")
+                        if fallback_dir is not None:
+                            if not self._warned_stage_fallback:
+                                print(
+                                    f"[covisible] Missing masks under '{self.covisible_root / stage}'. "
+                                    f"Falling back to '{fallback_dir}'."
+                                )
+                                self._warned_stage_fallback = True
+                            stage_dir = fallback_dir
+                    if stage_dir is None:
+                        if not self._warned_missing_covisible:
+                            print(
+                                f"[Warning] Covisible masks for stage '{stage}' not found under {self.covisible_root}."
+                            )
+                            self._warned_missing_covisible = True
+                        continue
+                    mask_path = stage_dir / Path(image_name).with_suffix(".png")
+                    if mask_path.exists():
+                        mask_np = iio.imread(mask_path.as_posix())
+                        if mask_np.ndim == 3:
+                            mask_np = mask_np[..., 0]
+                        mask_t = torch.from_numpy((mask_np > 127).astype(np.float32)).to(device)
+                        mask_t = mask_t[None, None, :, :]
+                        if mask_t.shape[-2:] != (height, width):
+                            mask_t = F.interpolate(mask_t, size=(height, width), mode="nearest")
+                        coverage = mask_t.sum().item() / (height * width)
+                        metrics["mask_coverage"].append(torch.tensor(coverage, device=device))
+                        if coverage > 1e-5:
+                            metrics["mpsnr"].append(dy_metrics.mpsnr(colors_p, pixels_p, mask_t))
+                            metrics["mssim"].append(dy_metrics.mssim(colors_p, pixels_p, mask_t))
+                            metrics["mlpips"].append(
+                                dy_metrics.mlpips(colors_p, pixels_p, mask_t, net=cfg.lpips_net)
+                            )
+                    else:
+                        if not self._warned_missing_covisible:
+                            print(f"[Warning] Covisible mask missing at {mask_path}.")
+                            self._warned_missing_covisible = True
                 except Exception as e:
                     if not self._warned_missing_covisible:
                         print(
-                            f"Warning: Failed to load covisible mask for evaluation (first occurrence). "
+                            "Warning: Failed to load covisible mask for evaluation (first occurrence). "
                             f"Continuing without masks. Error: {e}"
                         )
                         self._warned_missing_covisible = True
 
-            canvas_list = [pixels, colors]
+            # Save visualization frames. Optionally omit GT from the mosaic.
+            canvas_list = [colors_for_vis] if not cfg.vis_concat_gt else [pixels, colors_for_vis]
 
             if world_rank == 0:
                 # write images
@@ -1083,17 +1318,12 @@ class Runner:
                     canvas,
                 )
 
-                pixels_p = pixels.permute(0, 3, 1, 2)  # [1, 3, H, W]
-                colors_p = colors.permute(0, 3, 1, 2)  # [1, 3, H, W]
-                metrics["psnr"].append(self.psnr(colors_p, pixels_p))
-                metrics["ssim"].append(self.ssim(colors_p, pixels_p))
-                metrics["lpips"].append(self.lpips(colors_p, pixels_p))
                 if cfg.use_bilateral_grid:
-                    cc_colors = color_correct(colors, pixels)
+                    cc_colors = color_correct(colors_for_vis, pixels)
                     cc_colors_p = cc_colors.permute(0, 3, 1, 2)  # [1, 3, H, W]
-                    metrics["cc_psnr"].append(self.psnr(cc_colors_p, pixels_p))
-                    metrics["cc_ssim"].append(self.ssim(cc_colors_p, pixels_p))
-                    metrics["cc_lpips"].append(self.lpips(cc_colors_p, pixels_p))
+                    metrics["cc_psnr"].append(dy_metrics.psnr(cc_colors_p, pixels_p))
+                    metrics["cc_ssim"].append(dy_metrics.ssim(cc_colors_p, pixels_p))
+                    metrics["cc_lpips"].append(dy_metrics.lpips(cc_colors_p, pixels_p, net=cfg.lpips_net))
 
         if world_rank == 0:
             ellipse_time /= len(valloader)
@@ -1135,7 +1365,17 @@ class Runner:
         cfg = self.cfg
         device = self.device
 
-        camtoworlds_all = self.parser.camtoworlds[5:-5]
+        camtoworlds = self.parser.camtoworlds
+        if camtoworlds.shape[0] < 2:
+            print(
+                "Skipping trajectory rendering: need at least 2 camera poses,"
+                f" found {camtoworlds.shape[0]}"
+            )
+            return
+        if camtoworlds.shape[0] > 10:
+            camtoworlds_all = camtoworlds[5:-5]
+        else:
+            camtoworlds_all = camtoworlds
         if cfg.render_traj_path == "interp":
             camtoworlds_all = generate_interpolated_path(
                 camtoworlds_all, 1
@@ -1303,6 +1543,7 @@ def main(local_rank: int, world_rank, world_size: int, cfg: Config):
             ckpt_probe = torch.load(cfg.ckpt[0], map_location="cpu")
         if not cfg.pose_opt and "pose_adjust" in ckpt_probe:
             cfg.pose_opt = True
+            print("[Info] Auto-enabled pose_opt based on checkpoint contents")
 
     runner = Runner(local_rank, world_rank, world_size, cfg)
 
@@ -1314,19 +1555,25 @@ def main(local_rank: int, world_rank, world_size: int, cfg: Config):
         ]
         for k in runner.splats.keys():
             runner.splats[k].data = torch.cat([ckpt["splats"][k] for ckpt in ckpts])
-        if cfg.pose_opt and ckpt_probe is not None and "pose_adjust" in ckpt_probe:
+        if cfg.pose_opt and "pose_adjust" in ckpts[0]:
             pose_state = ckpts[0]["pose_adjust"]
-            stored_size = pose_state["embeds.weight"].shape[0]
             target = runner.pose_adjust
             if isinstance(target, torch.nn.parallel.DistributedDataParallel):
-                target = target.module
-            current_size = target.embeds.weight.shape[0]
-            if current_size != stored_size:
-                target = CameraOptModule(stored_size).to(runner.device)
-                target.load_state_dict(pose_state)
-                runner.pose_adjust = target
+                module = target.module
             else:
-                target.load_state_dict(pose_state)
+                module = target
+            current_state = module.state_dict()
+            shape_mismatch = any(
+                current_state[k].shape != pose_state.get(k, None).shape
+                for k in current_state
+            )
+            if shape_mismatch:
+                print(
+                    "[Warning] pose_adjust state shape mismatch; skipping pose restoration."
+                )
+            else:
+                module.load_state_dict(pose_state)
+                print("[Info] Restored pose adjustments from checkpoint")
         step = ckpts[0]["step"]
         runner.eval(step=step)
         runner.render_traj(step=step)

@@ -61,6 +61,52 @@ bash benchmarks/basic.sh
 We provide a set of examples to get you started! Below you can find the details about
 the examples (requires to install some exta dependencies via `pip install -r examples/requirements.txt`)
 
+### DyCheck-Style Masked Evaluation
+
+Scenes with significant disocclusion benefit from evaluating only on pixels that are
+co-visible across nearby views. gsplat now mirrors DyCheck's protocol via
+co-visibility masks and masked metrics (`mpsnr`, `mssim`, `mlpips`).
+
+1. **Generate covisible masks** (stores PNG masks plus `alignment.npz`):
+
+   ```bash
+   python examples/preprocess_covisible_colmap.py \
+       --base_dir data/scene/test \
+       --support_dir data/scene/train \
+       --factor 1 \
+       --base_split val --support_split train \
+       --batch_size 16 --max_hw 512
+   ```
+
+2. **Run evaluation with DyCheck metrics** (gsplat trainer auto-enables masked metrics when
+   `--eval_use_covisible` is set):
+
+   ```bash
+   python examples/simple_trainer.py default \
+       --data_dir data/scene/test \
+       --result_dir results/scene_eval \
+       --ckpt results/scene/ckpts/ckpt_29999_rank0.pt \
+       --eval_only \
+       --eval_use_covisible \
+       --eval_dycheck_metrics
+   ```
+
+3. **Inspect metrics**. Evaluation JSON now reports both legacy full-frame metrics (`psnr`, `ssim`, `lpips`)
+   and DyCheck-style counterparts plus `mask_coverage` for transparency.
+
+Automated gates can call `scripts/dycheck_smoke_test.sh`, which generates a single low-resolution
+mask and runs `pytest tests/test_dycheck_metrics.py` to ensure the DyCheck pathway keeps working.
+
+- **Batch static evaluation.** To refresh renders + metrics for every static scene/camera, launch the
+  bundled SLURM driver (one array task per scene):
+
+  ```bash
+  sbatch examples/static_eval_only.slurm ../gs7/dataset results/static
+  ```
+
+  Environment knobs: `EVAL_K` (default 10 frames per camera), `USE_COVISIBLE=0|1`, and
+  `STATIC_EVAL_CAMERAS=iphone,stereo` to restrict the camera set.
+
 - [Train a 3D Gaussian splatting model on a COLMAP capture.](https://docs.gsplat.studio/main/examples/colmap.html)
 - [Fit a 2D image with 3D Gaussians.](https://docs.gsplat.studio/main/examples/image.html)
 - [Render a large scene in real-time.](https://docs.gsplat.studio/main/examples/large_scale.html)
